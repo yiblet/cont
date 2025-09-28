@@ -1,7 +1,24 @@
 use either::Either;
 
+/// Computations that yield an initial value before processing input.
+///
+/// Unlike `Cont`, `First` stages can produce output immediately, making them ideal
+/// for pipeline initialization or generators with seed values.
+///
+/// ```rust
+/// use cont::*;
+///
+/// let stage = first_once(42, |x: i32| x + 1);
+/// let (initial, mut cont) = stage.first().unwrap_left();
+/// assert_eq!(initial, 42);
+/// ```
 pub trait First<A> {
     type Next: Cont<A>;
+
+    /// Execute the first stage.
+    ///
+    /// Returns `Left((yield_value, continuation))` for normal execution,
+    /// or `Right(done_value)` if the computation completes immediately.
     fn first(
         self,
     ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done>;
@@ -17,9 +34,25 @@ where
     }
 }
 
+/// Core trait for stateful computations that process input and yield intermediate values.
+///
+/// Each call to `next()` either yields an intermediate result or signals completion.
+/// This allows building composable, resumable computations.
+///
+/// ```rust
+/// use cont::*;
+///
+/// let mut stage = once(|x: i32| x * 2);
+/// assert_eq!(stage.next(5).unwrap_left(), 10);
+/// assert_eq!(stage.next(3).unwrap_right(), 3); // Done
+/// ```
 pub trait Cont<A> {
+    /// Type of intermediate values yielded during computation
     type Yield;
+    /// Type of final result when computation completes
     type Done;
+
+    /// Process input, returning `Left(yield)` to continue or `Right(done)` to complete.
     fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done>;
 }
 
@@ -72,6 +105,9 @@ where
     }
 }
 
+/// Applies a function to each input, yielding results indefinitely.
+///
+/// Never completes on its own - will continue processing until externally stopped.
 pub struct Repeat<F>(F);
 
 impl<A, Y, F> Cont<A> for Repeat<F>
@@ -99,12 +135,27 @@ where
     }
 }
 
+/// Applies a function once, then completes on subsequent calls.
+///
+/// First call yields the function result, subsequent calls return `Right(input)`.
 pub struct Once<F>(Option<F>);
 
+/// Create a continuation that applies a function once.
+///
+/// ```rust
+/// use cont::*;
+///
+/// let mut stage = once(|x: i32| x + 10);
+/// assert_eq!(stage.next(5).unwrap_left(), 15);
+/// assert_eq!(stage.next(3).unwrap_right(), 3); // Done
+/// ```
 pub fn once<F>(f: F) -> Once<F> {
     Once(Some(f))
 }
 
+/// Yield an initial value, then apply a function once.
+///
+/// Combines immediate output with single function application.
 pub fn first_once<A, Y, F: FnOnce(A) -> Y>(y: Y, f: F) -> Once<(Y, F)> {
     Once(Some((y, f)))
 }
@@ -143,6 +194,10 @@ where
     }
 }
 
+/// Run the first continuation to completion, then feed its result to the second.
+///
+/// The first stage's `Done` value becomes the input to the second stage.
+/// Both stages must yield the same type.
 pub fn chain<A, L, R>(l: L, r: R) -> Chain<L, R>
 where
     L: Cont<A, Done = A>,
@@ -151,6 +206,9 @@ where
     Chain(Some(l), r)
 }
 
+/// Chain a `First` stage with a continuation.
+///
+/// Allows connecting stages that have initial yields with regular continuations.
 pub fn first_chain<A, L, R>(l: L, r: R) -> Chain<L, R>
 where
     L: First<A>,
@@ -160,6 +218,10 @@ where
     Chain(Some(l), r)
 }
 
+/// Chains two stages sequentially.
+///
+/// Created via `chain()` or `first_chain()`. The first stage is dropped from memory
+/// once it completes to free resources.
 pub struct Chain<S1, S2>(Option<S1>, S2);
 
 impl<A, L, R> Cont<A> for Chain<L, R>
@@ -205,6 +267,9 @@ where
     }
 }
 
+/// Transforms input before passing it to the wrapped stage.
+///
+/// Useful for adapting between different input types or preprocessing data.
 pub struct MapInput<S, F> {
     f: F,
     stage: S,
@@ -248,6 +313,9 @@ where
     }
 }
 
+/// Transforms yielded values from the wrapped stage.
+///
+/// Allows converting or formatting output without changing the underlying computation.
 pub struct MapYield<S, F> {
     f: F,
     stage: S,
@@ -296,6 +364,9 @@ where
     }
 }
 
+/// Transforms the final result from the wrapped stage.
+///
+/// Applied only when the computation completes, not to intermediate yields.
 pub struct MapDone<S, F> {
     f: F,
     stage: S,
@@ -341,7 +412,11 @@ where
     }
 }
 
+/// Extension methods for chaining and transforming continuations.
+///
+/// Automatically implemented for all `Cont` types, providing a fluent API.
 pub trait ContExt<A>: Cont<A> {
+    /// Chain with another continuation.
     fn chain<R>(self, r: R) -> Chain<Self, R>
     where
         Self: Sized + Cont<A, Done = A>,
@@ -350,6 +425,7 @@ pub trait ContExt<A>: Cont<A> {
         chain(self, r)
     }
 
+    /// Chain with a function that executes once.
     fn chain_once<F>(self, f: F) -> Chain<Self, Once<F>>
     where
         Self: Sized + Cont<A, Done = A>,
@@ -358,6 +434,7 @@ pub trait ContExt<A>: Cont<A> {
         chain(self, Once::new(f))
     }
 
+    /// Chain with a function that repeats indefinitely.
     fn chain_repeat<F>(self, f: F) -> Chain<Self, Repeat<F>>
     where
         Self: Sized + Cont<A, Done = A>,
@@ -366,6 +443,7 @@ pub trait ContExt<A>: Cont<A> {
         chain(self, repeat(f))
     }
 
+    /// Transform inputs before they reach this continuation.
     fn map_input<NewInput, F>(self, f: F) -> MapInput<Self, F>
     where
         Self: Sized,
@@ -374,6 +452,7 @@ pub trait ContExt<A>: Cont<A> {
         MapInput { f, stage: self }
     }
 
+    /// Transform yielded values before returning them.
     fn map_yield<NewYield, F>(self, f: F) -> MapYield<Self, F>
     where
         Self: Sized,
@@ -382,6 +461,7 @@ pub trait ContExt<A>: Cont<A> {
         MapYield { f, stage: self }
     }
 
+    /// Transform the final result when completing.
     fn map_done<NewDone, F>(self, f: F) -> MapDone<Self, F>
     where
         Self: Sized,
@@ -393,7 +473,11 @@ pub trait ContExt<A>: Cont<A> {
 
 impl<A, T: Cont<A>> ContExt<A> for T {}
 
+/// Extension methods for chaining and transforming first stages.
+///
+/// Automatically implemented for all `First` types, providing a fluent API.
 pub trait FirstExt<A>: First<A> {
+    /// Chain with a continuation.
     fn chain<S, R>(self, r: R) -> Chain<Self, R>
     where
         S: Cont<A, Done = A>,
@@ -403,6 +487,7 @@ pub trait FirstExt<A>: First<A> {
         first_chain(self, r)
     }
 
+    /// Chain with a function that executes once.
     fn chain_once<S, F>(self, f: F) -> Chain<Self, Once<F>>
     where
         S: Cont<A, Done = A>,
@@ -412,6 +497,7 @@ pub trait FirstExt<A>: First<A> {
         first_chain(self, once(f))
     }
 
+    /// Chain with a function that repeats indefinitely.
     fn chain_repeat<S, F>(self, f: F) -> Chain<Self, Repeat<F>>
     where
         S: Cont<A, Done = A>,
@@ -421,6 +507,7 @@ pub trait FirstExt<A>: First<A> {
         first_chain(self, repeat(f))
     }
 
+    /// Transform inputs before they reach the underlying continuation.
     fn map_input<NewInput, F>(self, f: F) -> MapInput<Self, F>
     where
         Self: Sized,
@@ -430,6 +517,7 @@ pub trait FirstExt<A>: First<A> {
         MapInput { f, stage: self }
     }
 
+    /// Transform yielded values before returning them.
     fn map_yield<NewYield, F>(self, f: F) -> MapYield<Self, F>
     where
         Self: Sized,
@@ -439,6 +527,7 @@ pub trait FirstExt<A>: First<A> {
         MapYield { f, stage: self }
     }
 
+    /// Transform the final result when completing.
     fn map_done<NewDone, F>(self, f: F) -> MapDone<Self, F>
     where
         Self: Sized,
@@ -451,10 +540,23 @@ pub trait FirstExt<A>: First<A> {
 
 impl<A, T: First<A>> FirstExt<A> for T {}
 
+/// Create a continuation that applies a function indefinitely.
+///
+/// ```rust
+/// use cont::*;
+///
+/// let mut doubler = repeat(|x: i32| x * 2);
+/// assert_eq!(doubler.next(5).unwrap_left(), 10);
+/// assert_eq!(doubler.next(3).unwrap_left(), 6);
+/// // Continues forever...
+/// ```
 pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
     Repeat(f)
 }
 
+/// Yield an initial value, then apply a function indefinitely.
+///
+/// Useful for generators that need to emit a seed value before starting their loop.
 pub fn first_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> Repeat<(Y, F)> {
     Repeat((y, f))
 }

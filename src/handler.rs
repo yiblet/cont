@@ -1,8 +1,16 @@
+//! Functions for driving continuations to completion.
+//!
+//! This module provides both synchronous and asynchronous execution functions,
+//! plus utilities for working with continuations that need initial input.
+
 use crate::cont::{Cont, First};
 use either::Either;
 use std::future::Future;
 
-/// Drive a `First` stage by synchronously responding to each yield until it finishes.
+/// Drive a `First` stage to completion with synchronous responses.
+///
+/// Executes the initial `First` stage and continues driving the resulting
+/// continuation until completion, calling the responder for each yield.
 pub fn handle_first_sync<S, A, R>(stage: S, mut responder: R) -> <S::Next as Cont<A>>::Done
 where
     S: First<A>,
@@ -25,7 +33,9 @@ where
     }
 }
 
-/// Drive a continuation by synchronously responding to each yield until it finishes.
+/// Drive a continuation to completion with synchronous responses.
+///
+/// Takes an existing continuation with initial input and drives it to completion.
 pub fn handle_cont_sync<C, A, R>(mut stage: C, mut input: A, mut responder: R) -> C::Done
 where
     C: Cont<A>,
@@ -41,7 +51,9 @@ where
     }
 }
 
-/// Drive a continuation by asynchronously responding to each yield until it finishes.
+/// Async version of `handle_cont_sync`.
+///
+/// The responder function returns a future that produces the next input.
 pub async fn handle_cont_async<C, A, R, Fut>(
     mut stage: C,
     mut input: A,
@@ -62,7 +74,9 @@ where
     }
 }
 
-/// Drive a `First` stage by asynchronously responding to each yield until it finishes.
+/// Async version of `handle_first_sync`.
+///
+/// The responder function returns a future that produces the next input.
 pub async fn handle_first_async<S, A, R, Fut>(
     stage: S,
     mut responder: R,
@@ -89,7 +103,16 @@ where
     }
 }
 
-/// Convenience helper that drives any stage implementing `First`.
+/// Main function for executing continuation pipelines.
+///
+/// This is the most commonly used function - a shorthand for `handle_first_sync`.
+///
+/// ```rust
+/// use cont::*;
+///
+/// let pipeline = first_once(10, |x: i32| x * 2).chain(once(|x: i32| x + 1));
+/// let result = handle(pipeline, |yielded| yielded + 5);
+/// ```
 pub fn handle<S, A, R>(stage: S, responder: R) -> <S::Next as Cont<A>>::Done
 where
     S: First<A>,
@@ -99,7 +122,9 @@ where
     handle_first_sync(stage, responder)
 }
 
-/// Asynchronous variant of [`handle`].
+/// Async version of `handle`.
+///
+/// Works with responder functions that return futures.
 pub async fn handle_async<S, A, R, Fut>(stage: S, responder: R) -> <S::Next as Cont<A>>::Done
 where
     S: First<A>,
@@ -110,7 +135,10 @@ where
     handle_first_async(stage, responder).await
 }
 
-/// Bundle a continuation with its first input so it can be treated as a `First` stage.
+/// Bundles a continuation with initial input to make it usable with `handle()`.
+///
+/// Converts any `Cont` into a `First` stage by providing the initial input upfront.
+/// This allows using regular continuations with the `handle()` function family.
 pub struct Seed<C, A> {
     stage: C,
     input: Option<A>,
@@ -125,6 +153,16 @@ impl<C, A> Seed<C, A> {
     }
 }
 
+/// Create a `Seed` with more natural parameter order: input first, then continuation.
+///
+/// ```rust
+/// use cont::*;
+///
+/// let result = handle(
+///     with_input(42, once(|x: i32| x / 2)),
+///     |yielded| yielded + 1
+/// );
+/// ```
 pub fn with_input<A, C>(input: A, stage: C) -> Seed<C, A>
 where
     C: Cont<A>,
