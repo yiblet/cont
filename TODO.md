@@ -1,0 +1,15 @@
+# TODOs
+- [ ] get rid of the seed object
+- [ ] figure out the naming of the types (should it be Yield / Done) 
+- [ ] Does first pay it's rent? 
+- [ ] Can first just be a struct?
+- [ ] Update the readme to explain very clearly what type of coroutine library this is. 
+    - I.E. it's cooperative coroutines that don't run their own threads or don't run in parallel
+    - You can make those other types of coroutines via tokio runtime shenanigans and async/await anyway
+- [ ] The trait "First" seems like a bad name for what it is 
+    - It's more like First represents continuations that have an initial request. 
+    - I.E. there's two types of continuations: ones where they begin by requesting something from the handler, and others where the handler requests first.
+    - To support both cont has two traits. First and Cont. 
+- [ ] Add a way to yield from some inner continuation of the same type. 
+- [ ] Add a way to chain based on an iterator of other conts.
+- [ ] Add iter methods to turn conts and firsts into iterators
