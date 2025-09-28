@@ -1,38 +1,50 @@
 use either::Either;
 
 pub trait First<A> {
-    type Next: Stage<A>;
-    fn first(self) -> (<Self::Next as Stage<A>>::Yield, Self::Next);
+    type Next: Cont<A>;
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done>;
 }
 
-pub trait Stage<A> {
-    type Yield;
-    type Resume;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume>;
-}
-
-impl<A, Y, R, F> Stage<A> for F
+impl<A, Y, F> First<A> for (Y, F)
 where
-    F: FnMut(A) -> Either<Y, R>,
+    F: Cont<A, Yield = Y>,
+{
+    type Next = F;
+    fn first(self) -> Either<(Y, F), F::Done> {
+        Either::Left(self)
+    }
+}
+
+pub trait Cont<A> {
+    type Yield;
+    type Done;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done>;
+}
+
+impl<A, Y, D, F> Cont<A> for F
+where
+    F: FnMut(A) -> Either<Y, D>,
 {
     type Yield = Y;
-    type Resume = R;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume> {
+    type Done = D;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         self(input)
     }
 }
 
-impl<A, L, R> Stage<A> for Either<L, R>
+impl<A, L, R> Cont<A> for Either<L, R>
 where
-    L: Stage<A>,
-    R: Stage<A, Yield = L::Yield, Resume = L::Resume>,
+    L: Cont<A>,
+    R: Cont<A, Yield = L::Yield, Done = L::Done>,
 {
     type Yield = L::Yield;
-    type Resume = L::Resume;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume> {
+    type Done = L::Done;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         match self {
-            Either::Left(l) => l.step(input),
-            Either::Right(r) => r.step(input),
+            Either::Left(l) => l.next(input),
+            Either::Right(r) => r.next(input),
         }
     }
 }
@@ -41,32 +53,34 @@ impl<A, L, R> First<A> for Either<L, R>
 where
     L: First<A>,
     R: First<A>,
-    R::Next: Stage<A, Resume = <L::Next as Stage<A>>::Resume, Yield = <L::Next as Stage<A>>::Yield>,
+    R::Next: Cont<A, Done = <L::Next as Cont<A>>::Done, Yield = <L::Next as Cont<A>>::Yield>,
 {
     type Next = Either<L::Next, R::Next>;
-    fn first(self) -> (<Self::Next as Stage<A>>::Yield, Self::Next) {
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
         match self {
-            Either::Left(l) => {
-                let (y, next_l) = l.first();
-                (y, Either::Left(next_l))
-            }
-            Either::Right(r) => {
-                let (y, next_r) = r.first();
-                (y, Either::Right(next_r))
-            }
+            Either::Left(l) => match l.first() {
+                Either::Left((y, next_l)) => Either::Left((y, Either::Left(next_l))),
+                Either::Right(resume) => Either::Right(resume),
+            },
+            Either::Right(r) => match r.first() {
+                Either::Left((y, next_r)) => Either::Left((y, Either::Right(next_r))),
+                Either::Right(resume) => Either::Right(resume),
+            },
         }
     }
 }
 
 pub struct Repeat<F>(F);
 
-impl<A, Y, F> Stage<A> for Repeat<F>
+impl<A, Y, F> Cont<A> for Repeat<F>
 where
     F: FnMut(A) -> Y,
 {
     type Yield = Y;
-    type Resume = A;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume> {
+    type Done = A;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         Either::Left(self.0(input))
     }
 }
@@ -77,9 +91,11 @@ where
 {
     type Next = Repeat<F>;
 
-    fn first(self) -> (<Self::Next as Stage<A>>::Yield, Self::Next) {
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
         let Repeat((y, f)) = self;
-        (y, Repeat(f))
+        Either::Left((y, Repeat(f)))
     }
 }
 
@@ -105,19 +121,21 @@ where
 {
     type Next = Once<F>;
 
-    fn first(self) -> (Y, Self::Next) {
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
         let (y, f) = self.0.expect("f must be Some");
-        (y, Once(Some(f)))
+        Either::Left((y, Once(Some(f))))
     }
 }
 
-impl<A, Y, F> Stage<A> for Once<F>
+impl<A, Y, F> Cont<A> for Once<F>
 where
     F: FnOnce(A) -> Y,
 {
     type Yield = Y;
-    type Resume = A;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume> {
+    type Done = A;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         match self.0.take() {
             Some(f) => Either::Left(f(input)),
             None => Either::Right(input),
@@ -127,8 +145,8 @@ where
 
 pub fn chain<A, L, R>(l: L, r: R) -> Chain<L, R>
 where
-    L: Stage<A, Resume = A>,
-    R: Stage<A, Yield = L::Yield>,
+    L: Cont<A, Done = A>,
+    R: Cont<A, Yield = L::Yield>,
 {
     Chain(Some(l), r)
 }
@@ -136,31 +154,31 @@ where
 pub fn first_chain<A, L, R>(l: L, r: R) -> Chain<L, R>
 where
     L: First<A>,
-    L::Next: Stage<A, Resume = A>,
-    R: Stage<A, Yield = <L::Next as Stage<A>>::Yield>,
+    L::Next: Cont<A, Done = A>,
+    R: Cont<A, Yield = <L::Next as Cont<A>>::Yield>,
 {
     Chain(Some(l), r)
 }
 
 pub struct Chain<S1, S2>(Option<S1>, S2);
 
-impl<A, L, R> Stage<A> for Chain<L, R>
+impl<A, L, R> Cont<A> for Chain<L, R>
 where
-    L: Stage<A, Resume = A>,
-    R: Stage<A, Yield = L::Yield>,
+    L: Cont<A, Done = A>,
+    R: Cont<A, Yield = L::Yield>,
 {
     type Yield = L::Yield;
-    type Resume = R::Resume;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume> {
+    type Done = R::Done;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         match self.0 {
-            Some(ref mut l) => match l.step(input) {
+            Some(ref mut l) => match l.next(input) {
                 Either::Left(y) => Either::Left(y),
                 Either::Right(a) => {
                     self.0 = None; // we drop the old stage when it's done
-                    self.1.step(a)
+                    self.1.next(a)
                 }
             },
-            None => self.1.step(input),
+            None => self.1.next(input),
         }
     }
 }
@@ -168,51 +186,64 @@ where
 impl<A, L, R> First<A> for Chain<L, R>
 where
     L: First<A>,
-    L::Next: Stage<A, Resume = A>,
-    R: Stage<A, Yield = <L::Next as Stage<A>>::Yield>,
+    L::Next: Cont<A, Done = A>,
+    R: Cont<A, Yield = <L::Next as Cont<A>>::Yield>,
 {
     type Next = Chain<L::Next, R>;
-    fn first(self) -> (<L::Next as Stage<A>>::Yield, Self::Next) {
-        let (y, l) = self.0.expect("l must be Some").first();
-        (y, Chain(Some(l), self.1))
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
+        let Chain(left_stage, mut right_stage) = self;
+        let left = left_stage.expect("l must be Some");
+        match left.first() {
+            Either::Left((y, next_left)) => Either::Left((y, Chain(Some(next_left), right_stage))),
+            Either::Right(a) => match right_stage.next(a) {
+                Either::Left(y) => Either::Left((y, Chain(None, right_stage))),
+                Either::Right(resume) => Either::Right(resume),
+            },
+        }
     }
 }
 
-pub struct Convert<S, F> {
+pub struct MapInput<S, F> {
     f: F,
     stage: S,
 }
 
-impl<A1, A2, S, F> Stage<A1> for Convert<S, F>
+impl<A1, A2, S, F> Cont<A1> for MapInput<S, F>
 where
-    S: Stage<A2>,
+    S: Cont<A2>,
     F: FnMut(A1) -> A2,
 {
     type Yield = S::Yield;
-    type Resume = S::Resume;
-    fn step(&mut self, input: A1) -> Either<Self::Yield, Self::Resume> {
+    type Done = S::Done;
+    fn next(&mut self, input: A1) -> Either<Self::Yield, Self::Done> {
         let a2 = (self.f)(input);
-        self.stage.step(a2)
+        self.stage.next(a2)
     }
 }
 
-impl<A1, A2, S, F> First<A1> for Convert<S, F>
+impl<A1, A2, S, F> First<A1> for MapInput<S, F>
 where
     S: First<A2>,
     F: FnMut(A1) -> A2,
 {
-    type Next = Convert<S::Next, F>;
+    type Next = MapInput<S::Next, F>;
 
-    fn first(self) -> (<Self::Next as Stage<A1>>::Yield, Self::Next) {
-        let Convert { f, stage } = self;
-        let (y, next_stage) = stage.first();
-        (
-            y,
-            Convert {
-                f,
-                stage: next_stage,
-            },
-        )
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A1>>::Yield, Self::Next), <Self::Next as Cont<A1>>::Done> {
+        let MapInput { f, stage } = self;
+        match stage.first() {
+            Either::Left((y, next_stage)) => Either::Left((
+                y,
+                MapInput {
+                    f,
+                    stage: next_stage,
+                },
+            )),
+            Either::Right(resume) => Either::Right(resume),
+        }
     }
 }
 
@@ -221,15 +252,15 @@ pub struct MapYield<S, F> {
     stage: S,
 }
 
-impl<A, Y1, Y2, S, F> Stage<A> for MapYield<S, F>
+impl<A, Y1, Y2, S, F> Cont<A> for MapYield<S, F>
 where
-    S: Stage<A, Yield = Y1>,
+    S: Cont<A, Yield = Y1>,
     F: FnMut(Y1) -> Y2,
 {
     type Yield = Y2;
-    type Resume = S::Resume;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume> {
-        match self.stage.step(input) {
+    type Done = S::Done;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+        match self.stage.next(input) {
             Either::Left(y1) => Either::Left((self.f)(y1)),
             Either::Right(a) => Either::Right(a),
         }
@@ -238,80 +269,90 @@ where
 
 impl<A, Y1, Y2, S, F> First<A> for MapYield<S, F>
 where
-    S: Stage<A, Yield = Y1> + First<A>,
+    S: Cont<A, Yield = Y1> + First<A>,
     F: FnMut(Y1) -> Y2,
-    S::Next: Stage<A, Yield = Y1>,
+    S::Next: Cont<A, Yield = Y1>,
 {
     type Next = MapYield<S::Next, F>;
 
-    fn first(self) -> (<Self::Next as Stage<A>>::Yield, Self::Next) {
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
         let MapYield { mut f, stage } = self;
-        let (y1, next_stage) = stage.first();
-        let mapped_y = f(y1);
-        (
-            mapped_y,
-            MapYield {
-                f,
-                stage: next_stage,
-            },
-        )
+        match stage.first() {
+            Either::Left((y1, next_stage)) => {
+                let mapped_y = f(y1);
+                Either::Left((
+                    mapped_y,
+                    MapYield {
+                        f,
+                        stage: next_stage,
+                    },
+                ))
+            }
+            Either::Right(resume) => Either::Right(resume),
+        }
     }
 }
 
-pub struct MapResume<S, F> {
+pub struct MapDone<S, F> {
     f: F,
     stage: S,
 }
 
-impl<A, Y, R1, R2, S, F> Stage<A> for MapResume<S, F>
+impl<A, Y, D1, D2, S, F> Cont<A> for MapDone<S, F>
 where
-    S: Stage<A, Yield = Y, Resume = R1>,
-    F: FnMut(R1) -> R2,
+    S: Cont<A, Yield = Y, Done = D1>,
+    F: FnMut(D1) -> D2,
 {
     type Yield = Y;
-    type Resume = R2;
-    fn step(&mut self, input: A) -> Either<Self::Yield, Self::Resume> {
-        match self.stage.step(input) {
+    type Done = D2;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+        match self.stage.next(input) {
             Either::Left(y) => Either::Left(y),
             Either::Right(r1) => Either::Right((self.f)(r1)),
         }
     }
 }
 
-impl<A, Y, R1, R2, S, F> First<A> for MapResume<S, F>
+impl<A, Y, D1, D2, S, F> First<A> for MapDone<S, F>
 where
-    S: Stage<A, Yield = Y, Resume = R1> + First<A>,
-    F: FnMut(R1) -> R2,
-    S::Next: Stage<A, Yield = Y, Resume = R1>,
+    S: Cont<A, Yield = Y, Done = D1> + First<A>,
+    F: FnMut(D1) -> D2,
+    S::Next: Cont<A, Yield = Y, Done = D1>,
 {
-    type Next = MapResume<S::Next, F>;
+    type Next = MapDone<S::Next, F>;
 
-    fn first(self) -> (<Self::Next as Stage<A>>::Yield, Self::Next) {
-        let MapResume { f, stage } = self;
-        let (y, next_stage) = stage.first();
-        (
-            y,
-            MapResume {
-                f,
-                stage: next_stage,
-            },
-        )
+    fn first(
+        self,
+    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
+        let MapDone { mut f, stage } = self;
+        match stage.first() {
+            Either::Left((y, next_stage)) => Either::Left((
+                y,
+                MapDone {
+                    f,
+                    stage: next_stage,
+                },
+            )),
+            Either::Right(resume) => Either::Right(f(resume)),
+        }
     }
 }
 
-pub trait StageExt<A>: Stage<A> {
+pub trait StageExt<A>: Cont<A> {
     fn chain<R>(self, r: R) -> Chain<Self, R>
     where
-        Self: Sized + Stage<A, Resume = A>,
-        R: Stage<A, Yield = Self::Yield>,
+        Self: Sized + Cont<A, Done = A>,
+        R: Cont<A, Yield = Self::Yield>,
     {
         chain(self, r)
     }
 
     fn chain_fn<F>(self, f: F) -> Chain<Self, Once<F>>
     where
-        Self: Sized + Stage<A, Resume = A>,
-        F: FnOnce(Self::Resume) -> Self::Yield,
+        Self: Sized + Cont<A, Done = A>,
+        F: FnOnce(Self::Done) -> Self::Yield,
     {
         chain(self, Once::new(f))
     }
@@ -320,18 +361,18 @@ pub trait StageExt<A>: Stage<A> {
 pub trait FirstExt<A>: First<A> {
     fn chain<S, R>(self, r: R) -> Chain<Self, R>
     where
-        S: Stage<A, Resume = A>,
+        S: Cont<A, Done = A>,
         Self: Sized + First<A, Next = S>,
-        R: Stage<A, Yield = S::Yield>,
+        R: Cont<A, Yield = S::Yield>,
     {
         first_chain(self, r)
     }
 
     fn chain_fn<S, F>(self, f: F) -> Chain<Self, Once<F>>
     where
-        S: Stage<A, Resume = A>,
+        S: Cont<A, Done = A>,
         Self: Sized + First<A, Next = S>,
-        F: FnOnce(S::Resume) -> S::Yield,
+        F: FnOnce(S::Done) -> S::Yield,
     {
         first_chain(self, Once::new(f))
     }
@@ -358,9 +399,9 @@ mod tests {
             next
         });
 
-        let (_, mut next) = fib.first();
+        let (_, mut next) = fib.first().unwrap_left();
         for i in 1..11 {
-            let cur = next.step(1).unwrap_left();
+            let cur = next.next(1).unwrap_left();
             assert_eq!(i + 1, cur);
         }
     }
@@ -374,9 +415,9 @@ mod tests {
         });
 
         assert_eq!(size_of_val(&divider), 32);
-        let (mut cur, mut next) = divider.first();
+        let (mut cur, mut next) = divider.first().unwrap_left();
         for i in 2..20 {
-            let next_cur = next.step(i).unwrap_left();
+            let next_cur = next.next(i).unwrap_left();
             assert_eq!(cur / i, next_cur);
             cur = next_cur;
         }
