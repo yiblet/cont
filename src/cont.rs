@@ -1,5 +1,8 @@
 use std::{
-    cell::RefCell, fmt, rc::Rc, sync::{Arc, Mutex}
+    cell::RefCell,
+    fmt,
+    rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use either::Either;
@@ -88,6 +91,8 @@ impl fmt::Display for PoisonError {
         write!(f, "lock was poisoned")
     }
 }
+
+impl std::error::Error for PoisonError {}
 
 impl<A, C> Cont<A> for Arc<Mutex<C>>
 where
