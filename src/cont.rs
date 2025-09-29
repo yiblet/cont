@@ -1,39 +1,5 @@
 use either::Either;
 
-/// Computations that yield an initial value before processing input.
-///
-/// Unlike `Cont`, `First` stages can produce output immediately, making them ideal
-/// for pipeline initialization or generators with seed values.
-///
-/// ```rust
-/// use cont::*;
-///
-/// let stage = first_once(42, |x: i32| x + 1);
-/// let (initial, mut cont) = stage.first().unwrap_left();
-/// assert_eq!(initial, 42);
-/// ```
-pub trait First<A> {
-    type Next: Cont<A>;
-
-    /// Execute the first stage.
-    ///
-    /// Returns `Left((yield_value, continuation))` for normal execution,
-    /// or `Right(done_value)` if the computation completes immediately.
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done>;
-}
-
-impl<A, Y, F> First<A> for (Y, F)
-where
-    F: Cont<A, Yield = Y>,
-{
-    type Next = F;
-    fn first(self) -> Either<(Y, F), F::Done> {
-        Either::Left(self)
-    }
-}
-
 /// Core trait for stateful computations that process input and yield intermediate values.
 ///
 /// Each call to `next()` either yields an intermediate result or signals completion.
@@ -82,28 +48,6 @@ where
     }
 }
 
-impl<A, L, R> First<A> for Either<L, R>
-where
-    L: First<A>,
-    R: First<A>,
-    R::Next: Cont<A, Done = <L::Next as Cont<A>>::Done, Yield = <L::Next as Cont<A>>::Yield>,
-{
-    type Next = Either<L::Next, R::Next>;
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
-        match self {
-            Either::Left(l) => match l.first() {
-                Either::Left((y, next_l)) => Either::Left((y, Either::Left(next_l))),
-                Either::Right(resume) => Either::Right(resume),
-            },
-            Either::Right(r) => match r.first() {
-                Either::Left((y, next_r)) => Either::Left((y, Either::Right(next_r))),
-                Either::Right(resume) => Either::Right(resume),
-            },
-        }
-    }
-}
 
 /// Applies a function to each input, yielding results indefinitely.
 ///
@@ -118,20 +62,6 @@ where
     type Done = A;
     fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         Either::Left(self.0(input))
-    }
-}
-
-impl<A, Y, F> First<A> for Repeat<(Y, F)>
-where
-    F: FnMut(A) -> Y,
-{
-    type Next = Repeat<F>;
-
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
-        let Repeat((y, f)) = self;
-        Either::Left((y, Repeat(f)))
     }
 }
 
@@ -153,12 +83,6 @@ pub fn once<F>(f: F) -> Once<F> {
     Once(Some(f))
 }
 
-/// Yield an initial value, then apply a function once.
-///
-/// Combines immediate output with single function application.
-pub fn first_once<A, Y, F: FnOnce(A) -> Y>(y: Y, f: F) -> Once<(Y, F)> {
-    Once(Some((y, f)))
-}
 
 impl<F> Once<F> {
     pub fn new(f: F) -> Once<F> {
@@ -166,19 +90,6 @@ impl<F> Once<F> {
     }
 }
 
-impl<A, Y, F> First<A> for Once<(Y, F)>
-where
-    F: FnOnce(A) -> Y,
-{
-    type Next = Once<F>;
-
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
-        let (y, f) = self.0.expect("f must be Some");
-        Either::Left((y, Once(Some(f))))
-    }
-}
 
 impl<A, Y, F> Cont<A> for Once<F>
 where
@@ -206,17 +117,6 @@ where
     Chain(Some(l), r)
 }
 
-/// Chain a `First` stage with a continuation.
-///
-/// Allows connecting stages that have initial yields with regular continuations.
-pub fn first_chain<A, L, R>(l: L, r: R) -> Chain<L, R>
-where
-    L: First<A>,
-    L::Next: Cont<A, Done = A>,
-    R: Cont<A, Yield = <L::Next as Cont<A>>::Yield>,
-{
-    Chain(Some(l), r)
-}
 
 /// Chains two stages sequentially.
 ///
@@ -245,34 +145,13 @@ where
     }
 }
 
-impl<A, L, R> First<A> for Chain<L, R>
-where
-    L: First<A>,
-    L::Next: Cont<A, Done = A>,
-    R: Cont<A, Yield = <L::Next as Cont<A>>::Yield>,
-{
-    type Next = Chain<L::Next, R>;
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
-        let Chain(left_stage, mut right_stage) = self;
-        let left = left_stage.expect("l must be Some");
-        match left.first() {
-            Either::Left((y, next_left)) => Either::Left((y, Chain(Some(next_left), right_stage))),
-            Either::Right(a) => match right_stage.next(a) {
-                Either::Left(y) => Either::Left((y, Chain(None, right_stage))),
-                Either::Right(resume) => Either::Right(resume),
-            },
-        }
-    }
-}
 
 /// Transforms input before passing it to the wrapped stage.
 ///
 /// Useful for adapting between different input types or preprocessing data.
 pub struct MapInput<S, F> {
-    f: F,
-    stage: S,
+    pub f: F,
+    pub stage: S,
 }
 
 impl<A1, A2, S, F> Cont<A1> for MapInput<S, F>
@@ -288,37 +167,13 @@ where
     }
 }
 
-impl<A1, A2, S, F> First<A1> for MapInput<S, F>
-where
-    S: First<A2>,
-    F: FnMut(A1) -> A2,
-    S::Next: Cont<A2>,
-{
-    type Next = MapInput<S::Next, F>;
-
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A1>>::Yield, Self::Next), <Self::Next as Cont<A1>>::Done> {
-        let MapInput { f, stage } = self;
-        match stage.first() {
-            Either::Left((y, next_stage)) => Either::Left((
-                y,
-                MapInput {
-                    f,
-                    stage: next_stage,
-                },
-            )),
-            Either::Right(resume) => Either::Right(resume),
-        }
-    }
-}
 
 /// Transforms yielded values from the wrapped stage.
 ///
 /// Allows converting or formatting output without changing the underlying computation.
 pub struct MapYield<S, F> {
-    f: F,
-    stage: S,
+    pub f: F,
+    pub stage: S,
 }
 
 impl<A, Y1, Y2, S, F> Cont<A> for MapYield<S, F>
@@ -336,40 +191,13 @@ where
     }
 }
 
-impl<A, Y1, Y2, S, F> First<A> for MapYield<S, F>
-where
-    S: First<A>,
-    S::Next: Cont<A, Yield = Y1>,
-    F: FnMut(Y1) -> Y2,
-{
-    type Next = MapYield<S::Next, F>;
-
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
-        let MapYield { mut f, stage } = self;
-        match stage.first() {
-            Either::Left((y1, next_stage)) => {
-                let mapped_y = f(y1);
-                Either::Left((
-                    mapped_y,
-                    MapYield {
-                        f,
-                        stage: next_stage,
-                    },
-                ))
-            }
-            Either::Right(resume) => Either::Right(resume),
-        }
-    }
-}
 
 /// Transforms the final result from the wrapped stage.
 ///
 /// Applied only when the computation completes, not to intermediate yields.
 pub struct MapDone<S, F> {
-    f: F,
-    stage: S,
+    pub f: F,
+    pub stage: S,
 }
 
 impl<A, Y, D1, D2, S, F> Cont<A> for MapDone<S, F>
@@ -387,30 +215,6 @@ where
     }
 }
 
-impl<A, Y, D1, D2, S, F> First<A> for MapDone<S, F>
-where
-    S: First<A>,
-    S::Next: Cont<A, Yield = Y, Done = D1>,
-    F: FnMut(D1) -> D2,
-{
-    type Next = MapDone<S::Next, F>;
-
-    fn first(
-        self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
-        let MapDone { mut f, stage } = self;
-        match stage.first() {
-            Either::Left((y, next_stage)) => Either::Left((
-                y,
-                MapDone {
-                    f,
-                    stage: next_stage,
-                },
-            )),
-            Either::Right(resume) => Either::Right(f(resume)),
-        }
-    }
-}
 
 /// Extension methods for chaining and transforming continuations.
 ///
@@ -444,28 +248,28 @@ pub trait ContExt<A>: Cont<A> {
     }
 
     /// Transform inputs before they reach this continuation.
-    fn map_input<NewInput, F>(self, f: F) -> MapInput<Self, F>
+    fn map_input<A2, F>(self, f: F) -> MapInput<Self, F>
     where
         Self: Sized,
-        F: FnMut(NewInput) -> A,
+        F: FnMut(A2) -> A,
     {
         MapInput { f, stage: self }
     }
 
     /// Transform yielded values before returning them.
-    fn map_yield<NewYield, F>(self, f: F) -> MapYield<Self, F>
+    fn map_yield<Y2, F>(self, f: F) -> MapYield<Self, F>
     where
         Self: Sized,
-        F: FnMut(Self::Yield) -> NewYield,
+        F: FnMut(Self::Yield) -> Y2,
     {
         MapYield { f, stage: self }
     }
 
     /// Transform the final result when completing.
-    fn map_done<NewDone, F>(self, f: F) -> MapDone<Self, F>
+    fn map_done<D2, F>(self, f: F) -> MapDone<Self, F>
     where
         Self: Sized,
-        F: FnMut(Self::Done) -> NewDone,
+        F: FnMut(Self::Done) -> D2,
     {
         MapDone { f, stage: self }
     }
@@ -473,72 +277,6 @@ pub trait ContExt<A>: Cont<A> {
 
 impl<A, T: Cont<A>> ContExt<A> for T {}
 
-/// Extension methods for chaining and transforming first stages.
-///
-/// Automatically implemented for all `First` types, providing a fluent API.
-pub trait FirstExt<A>: First<A> {
-    /// Chain with a continuation.
-    fn chain<S, R>(self, r: R) -> Chain<Self, R>
-    where
-        S: Cont<A, Done = A>,
-        Self: Sized + First<A, Next = S>,
-        R: Cont<A, Yield = S::Yield>,
-    {
-        first_chain(self, r)
-    }
-
-    /// Chain with a function that executes once.
-    fn chain_once<S, F>(self, f: F) -> Chain<Self, Once<F>>
-    where
-        S: Cont<A, Done = A>,
-        Self: Sized + First<A, Next = S>,
-        F: FnOnce(S::Done) -> S::Yield,
-    {
-        first_chain(self, once(f))
-    }
-
-    /// Chain with a function that repeats indefinitely.
-    fn chain_repeat<S, F>(self, f: F) -> Chain<Self, Repeat<F>>
-    where
-        S: Cont<A, Done = A>,
-        Self: Sized + First<A, Next = S>,
-        F: FnMut(S::Done) -> S::Yield,
-    {
-        first_chain(self, repeat(f))
-    }
-
-    /// Transform inputs before they reach the underlying continuation.
-    fn map_input<NewInput, F>(self, f: F) -> MapInput<Self, F>
-    where
-        Self: Sized,
-        Self::Next: Cont<A>,
-        F: FnMut(NewInput) -> A,
-    {
-        MapInput { f, stage: self }
-    }
-
-    /// Transform yielded values before returning them.
-    fn map_yield<NewYield, F>(self, f: F) -> MapYield<Self, F>
-    where
-        Self: Sized,
-        Self::Next: Cont<A>,
-        F: FnMut(<Self::Next as Cont<A>>::Yield) -> NewYield,
-    {
-        MapYield { f, stage: self }
-    }
-
-    /// Transform the final result when completing.
-    fn map_done<NewDone, F>(self, f: F) -> MapDone<Self, F>
-    where
-        Self: Sized,
-        Self::Next: Cont<A>,
-        F: FnMut(<Self::Next as Cont<A>>::Done) -> NewDone,
-    {
-        MapDone { f, stage: self }
-    }
-}
-
-impl<A, T: First<A>> FirstExt<A> for T {}
 
 /// Create a continuation that applies a function indefinitely.
 ///
@@ -554,16 +292,11 @@ pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
     Repeat(f)
 }
 
-/// Yield an initial value, then apply a function indefinitely.
-///
-/// Useful for generators that need to emit a seed value before starting their loop.
-pub fn first_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> Repeat<(Y, F)> {
-    Repeat((y, f))
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::first::*;
 
     fn add_three(value: i32) -> i32 {
         value + 3
@@ -637,8 +370,7 @@ mod tests {
             output
         });
 
-        let chain = initializer.chain(repeater);
-        let (first_yield, mut stage) = chain.first().unwrap_left();
+        let (first_yield, mut stage) = initializer.chain(repeater);
         assert_eq!(10, first_yield);
         assert_eq!(13, stage.next(8).unwrap_left());
         assert_eq!(16, stage.next(8).unwrap_left());
@@ -669,7 +401,7 @@ mod tests {
         })
         .map_yield(|value: i64| format!("total={value}"));
 
-        let (initial_total, mut stage) = repeating.first().unwrap_left();
+        let (initial_total, mut stage) = repeating;
         assert_eq!("total=0", initial_total);
         assert_eq!("total=5", stage.next("add 5").unwrap_left());
         assert_eq!("total=2", stage.next("sub 3").unwrap_left());
@@ -681,10 +413,9 @@ mod tests {
         let initializer = first_once(42_u32, |input: u32| input + 1);
         let finisher = once(|input: u32| input * 3);
 
-        let chain = initializer
+        let (first_value, mut stage) = initializer
             .chain(finisher)
             .map_done(|resume: u32| resume + 7);
-        let (first_value, mut stage) = chain.first().unwrap_left();
         assert_eq!(42, first_value);
 
         assert_eq!(11, stage.next(10).unwrap_left());
@@ -712,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_either_first_right_branch_selected() {
-        let stage: Either<Repeat<(i32, fn(i32) -> i32)>, Repeat<(i32, fn(i32) -> i32)>> =
+        let stage: Either<(i32, Repeat<fn(i32) -> i32>), (i32, Repeat<fn(i32) -> i32>)> =
             Either::Right(first_repeat(2_i32, add_three));
 
         let (first_value, mut next_stage) = stage.first().unwrap_left();
@@ -745,13 +476,11 @@ mod tests {
         let initializer = first_once(5_u32, |input: u32| input + 2);
         let finisher = once(|value: u32| value * 2);
 
-        let stage = initializer
+        let (first_value, mut rest) = initializer
             .chain(finisher)
             .map_input(|text: &str| text.parse::<u32>().expect("number"))
             .map_yield(|value: u32| format!("value={value}"))
             .map_done(|resume: u32| format!("done={resume}"));
-
-        let (first_value, mut rest) = stage.first().unwrap_left();
         assert_eq!("value=5", first_value);
         assert_eq!("value=9", rest.next("7").unwrap_left());
         assert_eq!("value=16", rest.next("8").unwrap_left());
