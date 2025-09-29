@@ -20,3 +20,4 @@
 - [ ] Ideas: 
     - Create a chain on iterators
     - Create a chain that creates a chain of firsts then the new type returns a vec of dones. 
+- [ ] it's hard to use the handle functions if the handler throws an error

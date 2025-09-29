@@ -190,7 +190,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FirstExt, chain, first_once, once};
+    use crate::{chain, first_once, once};
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::future::{Future, ready};
