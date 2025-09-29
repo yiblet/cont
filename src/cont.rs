@@ -1,9 +1,5 @@
 use std::{
-    borrow::BorrowMut,
-    cell::{RefCell, RefMut},
     fmt,
-    ops::DerefMut,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -85,17 +81,6 @@ pub trait Cont<A> {
     }
 }
 
-impl<A, Y, D, F> Cont<A> for F
-where
-    F: FnMut(A) -> Either<Y, D>,
-{
-    type Yield = Y;
-    type Done = D;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
-        self(input)
-    }
-}
-
 #[derive(Debug)]
 pub struct PoisonError;
 
@@ -105,12 +90,12 @@ impl fmt::Display for PoisonError {
     }
 }
 
-impl<A, F> Cont<A> for Arc<Mutex<F>>
+impl<A, C> Cont<A> for Arc<Mutex<C>>
 where
-    F: Cont<A>,
+    C: Cont<A>,
 {
-    type Yield = F::Yield;
-    type Done = Result<F::Done, PoisonError>;
+    type Yield = C::Yield;
+    type Done = Result<C::Done, PoisonError>;
     fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         match self.lock().map_err(|_| PoisonError) {
             Ok(mut f) => f.next(input).map_right(Ok),
@@ -119,15 +104,28 @@ where
     }
 }
 
-impl<A, F> Cont<A> for Rc<RefCell<F>>
+impl<A, C> Cont<A> for Rc<RefCell<C>>
 where
-    F: Cont<A>,
+    C: Cont<A>,
 {
-    type Yield = F::Yield;
-    type Done = F::Done;
+    type Yield = C::Yield;
+    type Done = C::Done;
     fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
         let mut v = self.as_ref().borrow_mut();
         v.next(input)
+    }
+}
+
+pub struct FromFn<F>(F);
+
+impl<A, Y, D, F> Cont<A> for FromFn<F>
+where
+    F: FnMut(A) -> Either<Y, D>,
+{
+    type Yield = Y;
+    type Done = D;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+        (self.0)(input)
     }
 }
 
