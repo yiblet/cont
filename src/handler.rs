@@ -3,7 +3,8 @@
 //! This module provides both synchronous and asynchronous execution functions,
 //! plus utilities for working with continuations that need initial input.
 
-use crate::cont::{Cont, First};
+use crate::cont::Cont;
+use crate::first::First;
 use either::Either;
 use std::future::Future;
 

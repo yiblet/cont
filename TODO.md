@@ -13,3 +13,10 @@
 - [ ] Add a way to yield from some inner continuation of the same type. 
 - [ ] Add a way to chain based on an iterator of other conts.
 - [ ] Add iter methods to turn conts and firsts into iterators
+- [ ] idea: 
+    - First is called InitCont (it's a thing that initializes into a cont by first yielding)
+- [ ] Should ContExt and FirstExt exist or can we move those into their own extensions? 
+- [ ] We should have features for Cont's and First's that will return a result type
+- [ ] Ideas: 
+    - Create a chain on iterators
+    - Create a chain that creates a chain of firsts then the new type returns a vec of dones. 
