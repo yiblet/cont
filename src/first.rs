@@ -1,5 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{Chain, Cont, MapDone, MapInput, MapYield, Once, Repeat, chain, once, repeat};
 use either::Either;
-use crate::{Cont, Chain, MapInput, MapYield, MapDone, once, repeat, chain, Once, Repeat};
 
 /// Computations that yield an initial value before processing input.
 ///
@@ -155,4 +157,3 @@ pub fn first_once<A, Y, F: FnOnce(A) -> Y>(y: Y, f: F) -> (Y, Once<F>) {
 pub fn first_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
     (y, repeat(f))
 }
-
