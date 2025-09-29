@@ -20,6 +20,60 @@ pub trait Cont<A> {
 
     /// Process input, returning `Left(yield)` to continue or `Right(done)` to complete.
     fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done>;
+
+    /// Chain with another continuation.
+    fn chain<R>(self, r: R) -> Chain<Self, R>
+    where
+        Self: Sized + Cont<A, Done = A>,
+        R: Cont<A, Yield = Self::Yield>,
+    {
+        chain(self, r)
+    }
+
+    /// Chain with a function that executes once.
+    fn chain_once<F>(self, f: F) -> Chain<Self, Once<F>>
+    where
+        Self: Sized + Cont<A, Done = A>,
+        F: FnOnce(Self::Done) -> Self::Yield,
+    {
+        chain(self, Once::new(f))
+    }
+
+    /// Chain with a function that repeats indefinitely.
+    fn chain_repeat<F>(self, f: F) -> Chain<Self, Repeat<F>>
+    where
+        Self: Sized + Cont<A, Done = A>,
+        F: FnMut(Self::Done) -> Self::Yield,
+    {
+        chain(self, repeat(f))
+    }
+
+    /// Transform inputs before they reach this continuation.
+    fn map_input<A2, F>(self, f: F) -> MapInput<Self, F>
+    where
+        Self: Sized,
+        F: FnMut(A2) -> A,
+    {
+        MapInput { f, stage: self }
+    }
+
+    /// Transform yielded values before returning them.
+    fn map_yield<Y2, F>(self, f: F) -> MapYield<Self, F>
+    where
+        Self: Sized,
+        F: FnMut(Self::Yield) -> Y2,
+    {
+        MapYield { f, stage: self }
+    }
+
+    /// Transform the final result when completing.
+    fn map_done<D2, F>(self, f: F) -> MapDone<Self, F>
+    where
+        Self: Sized,
+        F: FnMut(Self::Done) -> D2,
+    {
+        MapDone { f, stage: self }
+    }
 }
 
 impl<A, Y, D, F> Cont<A> for F
@@ -216,66 +270,6 @@ where
 }
 
 
-/// Extension methods for chaining and transforming continuations.
-///
-/// Automatically implemented for all `Cont` types, providing a fluent API.
-pub trait ContExt<A>: Cont<A> {
-    /// Chain with another continuation.
-    fn chain<R>(self, r: R) -> Chain<Self, R>
-    where
-        Self: Sized + Cont<A, Done = A>,
-        R: Cont<A, Yield = Self::Yield>,
-    {
-        chain(self, r)
-    }
-
-    /// Chain with a function that executes once.
-    fn chain_once<F>(self, f: F) -> Chain<Self, Once<F>>
-    where
-        Self: Sized + Cont<A, Done = A>,
-        F: FnOnce(Self::Done) -> Self::Yield,
-    {
-        chain(self, Once::new(f))
-    }
-
-    /// Chain with a function that repeats indefinitely.
-    fn chain_repeat<F>(self, f: F) -> Chain<Self, Repeat<F>>
-    where
-        Self: Sized + Cont<A, Done = A>,
-        F: FnMut(Self::Done) -> Self::Yield,
-    {
-        chain(self, repeat(f))
-    }
-
-    /// Transform inputs before they reach this continuation.
-    fn map_input<A2, F>(self, f: F) -> MapInput<Self, F>
-    where
-        Self: Sized,
-        F: FnMut(A2) -> A,
-    {
-        MapInput { f, stage: self }
-    }
-
-    /// Transform yielded values before returning them.
-    fn map_yield<Y2, F>(self, f: F) -> MapYield<Self, F>
-    where
-        Self: Sized,
-        F: FnMut(Self::Yield) -> Y2,
-    {
-        MapYield { f, stage: self }
-    }
-
-    /// Transform the final result when completing.
-    fn map_done<D2, F>(self, f: F) -> MapDone<Self, F>
-    where
-        Self: Sized,
-        F: FnMut(Self::Done) -> D2,
-    {
-        MapDone { f, stage: self }
-    }
-}
-
-impl<A, T: Cont<A>> ContExt<A> for T {}
 
 
 /// Create a continuation that applies a function indefinitely.

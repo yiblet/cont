@@ -24,6 +24,78 @@ pub trait First<A> {
     fn first(
         self,
     ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done>;
+
+    /// Chain with a continuation.
+    fn chain<R>(self, r: R) -> (<Self::Next as Cont<A>>::Yield, Chain<Self::Next, R>)
+    where
+        Self: Sized,
+        Self::Next: Cont<A, Done = A>,
+        R: Cont<A, Yield = <Self::Next as Cont<A>>::Yield>,
+    {
+        match self.first() {
+            Either::Left((y, next)) => (y, chain(next, r)),
+            Either::Right(_) => panic!("First stage completed immediately, cannot chain"),
+        }
+    }
+
+    /// Chain with a function that executes once.
+    fn chain_once<F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, Chain<Self::Next, Once<F>>)
+    where
+        Self: Sized,
+        Self::Next: Cont<A, Done = A>,
+        F: FnOnce(<Self::Next as Cont<A>>::Done) -> <Self::Next as Cont<A>>::Yield,
+    {
+        self.chain(once(f))
+    }
+
+    /// Chain with a function that repeats indefinitely.
+    fn chain_repeat<F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, Chain<Self::Next, Repeat<F>>)
+    where
+        Self: Sized,
+        Self::Next: Cont<A, Done = A>,
+        F: FnMut(<Self::Next as Cont<A>>::Done) -> <Self::Next as Cont<A>>::Yield,
+    {
+        self.chain(repeat(f))
+    }
+
+    /// Transform inputs before they reach the underlying continuation.
+    fn map_input<A2, F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, MapInput<Self::Next, F>)
+    where
+        Self: Sized,
+        F: FnMut(A2) -> A,
+    {
+        match self.first() {
+            Either::Left((y, next)) => (y, MapInput { f, stage: next }),
+            Either::Right(_) => panic!("First stage completed immediately, cannot map input"),
+        }
+    }
+
+    /// Transform yielded values before returning them.
+    fn map_yield<Y2, F>(self, mut f: F) -> (Y2, MapYield<Self::Next, F>)
+    where
+        Self: Sized,
+        F: FnMut(<Self::Next as Cont<A>>::Yield) -> Y2,
+    {
+        match self.first() {
+            Either::Left((y, next)) => {
+                let mapped_y = f(y);
+                (mapped_y, MapYield { f, stage: next })
+            }
+            Either::Right(_) => panic!("First stage completed immediately, cannot map yield"),
+        }
+    }
+
+    /// Transform the final result when completing.
+    fn map_done<D2, F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, MapDone<Self::Next, F>)
+    where
+        Self: Sized,
+        F: FnMut(<Self::Next as Cont<A>>::Done) -> D2,
+    {
+        match self.first() {
+            Either::Left((y, next)) => (y, MapDone { f, stage: next }),
+            Either::Right(_) => panic!("First stage completed immediately, cannot map done"),
+        }
+    }
 }
 
 impl<A, Y, F> First<A> for (Y, F)
@@ -84,88 +156,3 @@ pub fn first_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
     (y, repeat(f))
 }
 
-/// Extension methods for chaining and transforming first stages.
-///
-/// Implemented for tuples (Y, S) where S is a continuation.
-pub trait FirstExt<A, Y, S: Cont<A>> {
-    /// Chain with a continuation.
-    fn chain<R>(self, r: R) -> (Y, Chain<S, R>)
-    where
-        S: Cont<A, Done = A>,
-        R: Cont<A, Yield = Y>;
-
-    /// Chain with a function that executes once.
-    fn chain_once<F>(self, f: F) -> (Y, Chain<S, Once<F>>)
-    where
-        S: Cont<A, Done = A>,
-        F: FnOnce(S::Done) -> Y;
-
-    /// Chain with a function that repeats indefinitely.
-    fn chain_repeat<F>(self, f: F) -> (Y, Chain<S, Repeat<F>>)
-    where
-        S: Cont<A, Done = A>,
-        F: FnMut(S::Done) -> Y;
-
-    /// Transform inputs before they reach the underlying continuation.
-    fn map_input<A2, F>(self, f: F) -> (Y, MapInput<S, F>)
-    where
-        F: FnMut(A2) -> A;
-
-    /// Transform yielded values before returning them.
-    fn map_yield<Y2, F>(self, f: F) -> (Y2, MapYield<S, F>)
-    where
-        F: FnMut(Y) -> Y2;
-
-    /// Transform the final result when completing.
-    fn map_done<D2, F>(self, f: F) -> (Y, MapDone<S, F>)
-    where
-        F: FnMut(S::Done) -> D2;
-}
-
-impl<A, Y, S: Cont<A, Yield = Y>> FirstExt<A, Y, S> for (Y, S) {
-    fn chain<R>(self, r: R) -> (Y, Chain<S, R>)
-    where
-        S: Cont<A, Done = A>,
-        R: Cont<A, Yield = Y>,
-    {
-        first_chain(self, r)
-    }
-
-    fn chain_once<F>(self, f: F) -> (Y, Chain<S, Once<F>>)
-    where
-        S: Cont<A, Done = A>,
-        F: FnOnce(S::Done) -> Y,
-    {
-        first_chain(self, once(f))
-    }
-
-    fn chain_repeat<F>(self, f: F) -> (Y, Chain<S, Repeat<F>>)
-    where
-        S: Cont<A, Done = A>,
-        F: FnMut(S::Done) -> Y,
-    {
-        first_chain(self, repeat(f))
-    }
-
-    fn map_input<A2, F>(self, f: F) -> (Y, MapInput<S, F>)
-    where
-        F: FnMut(A2) -> A,
-    {
-        (self.0, MapInput { f, stage: self.1 })
-    }
-
-    fn map_yield<Y2, F>(self, mut f: F) -> (Y2, MapYield<S, F>)
-    where
-        F: FnMut(Y) -> Y2,
-    {
-        let mapped_y = f(self.0);
-        (mapped_y, MapYield { f, stage: self.1 })
-    }
-
-    fn map_done<D2, F>(self, f: F) -> (Y, MapDone<S, F>)
-    where
-        F: FnMut(S::Done) -> D2,
-    {
-        (self.0, MapDone { f, stage: self.1 })
-    }
-}
