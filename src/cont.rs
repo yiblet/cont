@@ -1,3 +1,12 @@
+use std::{
+    borrow::BorrowMut,
+    cell::{RefCell, RefMut},
+    fmt,
+    ops::DerefMut,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+
 use either::Either;
 
 /// Core trait for stateful computations that process input and yield intermediate values.
@@ -87,6 +96,41 @@ where
     }
 }
 
+#[derive(Debug)]
+pub struct PoisonError;
+
+impl fmt::Display for PoisonError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "lock was poisoned")
+    }
+}
+
+impl<A, F> Cont<A> for Arc<Mutex<F>>
+where
+    F: Cont<A>,
+{
+    type Yield = F::Yield;
+    type Done = Result<F::Done, PoisonError>;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+        match self.lock().map_err(|_| PoisonError) {
+            Ok(mut f) => f.next(input).map_right(Ok),
+            Err(e) => Either::Right(Err(e)),
+        }
+    }
+}
+
+impl<A, F> Cont<A> for Rc<RefCell<F>>
+where
+    F: Cont<A>,
+{
+    type Yield = F::Yield;
+    type Done = F::Done;
+    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+        let mut v = self.as_ref().borrow_mut();
+        v.next(input)
+    }
+}
+
 impl<A, L, R> Cont<A> for Either<L, R>
 where
     L: Cont<A>,
@@ -101,7 +145,6 @@ where
         }
     }
 }
-
 
 /// Applies a function to each input, yielding results indefinitely.
 ///
@@ -137,13 +180,11 @@ pub fn once<F>(f: F) -> Once<F> {
     Once(Some(f))
 }
 
-
 impl<F> Once<F> {
     pub fn new(f: F) -> Once<F> {
         Once(Some(f))
     }
 }
-
 
 impl<A, Y, F> Cont<A> for Once<F>
 where
@@ -170,7 +211,6 @@ where
 {
     Chain(Some(l), r)
 }
-
 
 /// Chains two stages sequentially.
 ///
@@ -199,7 +239,6 @@ where
     }
 }
 
-
 /// Transforms input before passing it to the wrapped stage.
 ///
 /// Useful for adapting between different input types or preprocessing data.
@@ -220,7 +259,6 @@ where
         self.stage.next(a2)
     }
 }
-
 
 /// Transforms yielded values from the wrapped stage.
 ///
@@ -245,7 +283,6 @@ where
     }
 }
 
-
 /// Transforms the final result from the wrapped stage.
 ///
 /// Applied only when the computation completes, not to intermediate yields.
@@ -269,9 +306,6 @@ where
     }
 }
 
-
-
-
 /// Create a continuation that applies a function indefinitely.
 ///
 /// ```rust
@@ -285,7 +319,6 @@ where
 pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
     Repeat(f)
 }
-
 
 #[cfg(test)]
 mod tests {
