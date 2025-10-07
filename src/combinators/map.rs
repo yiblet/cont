@@ -18,8 +18,8 @@ where
     S: Sans<I2, O>,
     F: FnMut(I1) -> I2,
 {
-    type Done = S::Done;
-    fn next(&mut self, input: I1) -> Step<O, Self::Done> {
+    type Return = S::Return;
+    fn next(&mut self, input: I1) -> Step<O, Self::Return> {
         let i2 = (self.f)(input);
         self.stage.next(i2)
     }
@@ -48,8 +48,8 @@ where
     S: Sans<I, O1>,
     F: FnMut(O1) -> O2,
 {
-    type Done = S::Done;
-    fn next(&mut self, input: I) -> Step<O2, Self::Done> {
+    type Return = S::Return;
+    fn next(&mut self, input: I) -> Step<O2, Self::Return> {
         match self.stage.next(input) {
             Step::Yielded(o1) => Step::Yielded((self.f)(o1)),
             Step::Complete(a) => Step::Complete(a),
@@ -60,23 +60,23 @@ where
 /// Transforms the final result from the wrapped stage.
 ///
 /// Applied only when the computation completes, not to intermediate yields.
-pub struct MapDone<S, F> {
+pub struct MapReturn<S, F> {
     f: F,
     stage: S,
 }
 
 /// Create a continuation that transforms the final result from the wrapped stage.
-pub fn map_done<S, F>(f: F, stage: S) -> MapDone<S, F> {
-    MapDone { f, stage }
+pub fn map_return<S, F>(f: F, stage: S) -> MapReturn<S, F> {
+    MapReturn { f, stage }
 }
 
-impl<I, O, D1, D2, S, F> Sans<I, O> for MapDone<S, F>
+impl<I, O, D1, D2, S, F> Sans<I, O> for MapReturn<S, F>
 where
-    S: Sans<I, O, Done = D1>,
+    S: Sans<I, O, Return = D1>,
     F: FnMut(D1) -> D2,
 {
-    type Done = D2;
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    type Return = D2;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         match self.stage.next(input) {
             Step::Yielded(o) => Step::Yielded(o),
             Step::Complete(r1) => Step::Complete((self.f)(r1)),

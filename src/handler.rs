@@ -12,7 +12,7 @@ use std::future::Future;
 ///
 /// Executes the initial `InitSans` stage and continues driving the resulting
 /// continuation until completion, calling the responder for each yield.
-pub fn handle_init_sync<S, I, O, R>(stage: S, mut responder: R) -> <S::Next as Sans<I, O>>::Done
+pub fn handle_init_sync<S, I, O, R>(stage: S, mut responder: R) -> <S::Next as Sans<I, O>>::Return
 where
     S: InitSans<I, O>,
     S::Next: Sans<I, O>,
@@ -37,7 +37,7 @@ where
 /// Drive a continuation to completion with synchronous responses.
 ///
 /// Takes an existing continuation with initial input and drives it to completion.
-pub fn handle_cont_sync<C, I, O, R>(mut stage: C, mut input: I, mut responder: R) -> C::Done
+pub fn handle_cont_sync<C, I, O, R>(mut stage: C, mut input: I, mut responder: R) -> C::Return
 where
     C: Sans<I, O>,
     R: FnMut(O) -> I,
@@ -59,7 +59,7 @@ pub async fn handle_cont_async<C, I, O, R, Fut>(
     mut stage: C,
     mut input: I,
     mut responder: R,
-) -> C::Done
+) -> C::Return
 where
     C: Sans<I, O>,
     R: FnMut(O) -> Fut,
@@ -81,7 +81,7 @@ where
 pub async fn handle_init_async<S, I, O, R, Fut>(
     stage: S,
     mut responder: R,
-) -> <S::Next as Sans<I, O>>::Done
+) -> <S::Next as Sans<I, O>>::Return
 where
     S: InitSans<I, O>,
     S::Next: Sans<I, O>,
@@ -114,7 +114,7 @@ where
 /// let pipeline = init_once(10, |x: i32| x * 2).chain(once(|x: i32| x + 1));
 /// let result = handle(pipeline, |output| output + 5);
 /// ```
-pub fn handle<S, I, O, R>(stage: S, responder: R) -> <S::Next as Sans<I, O>>::Done
+pub fn handle<S, I, O, R>(stage: S, responder: R) -> <S::Next as Sans<I, O>>::Return
 where
     S: InitSans<I, O>,
     S::Next: Sans<I, O>,
@@ -126,7 +126,7 @@ where
 /// Async version of `handle`.
 ///
 /// Works with responder functions that return futures.
-pub async fn handle_async<S, I, O, R, Fut>(stage: S, responder: R) -> <S::Next as Sans<I, O>>::Done
+pub async fn handle_async<S, I, O, R, Fut>(stage: S, responder: R) -> <S::Next as Sans<I, O>>::Return
 where
     S: InitSans<I, O>,
     S::Next: Sans<I, O>,

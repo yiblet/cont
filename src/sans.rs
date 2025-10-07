@@ -6,9 +6,9 @@ use std::{
 };
 
 use crate::{
-    InitSans,
-    combinators::{AndThen, Chain, MapDone, MapInput, MapYield, Once, Repeat, chain, once, repeat},
+    combinators::{chain, once, repeat, Chain, MapInput, MapReturn, MapYield, Once, Repeat, AndThen, and_then},
     step::Step,
+    InitSans,
 };
 
 /// Core trait for stateful computations that process input and yield intermediate values.
@@ -21,26 +21,25 @@ use crate::{
 ///
 /// let mut stage = once(|x: i32| x * 2);
 /// assert_eq!(stage.next(5).unwrap_yielded(), 10);
-/// assert_eq!(stage.next(3).unwrap_complete(), 3); // Done
+/// assert_eq!(stage.next(3).unwrap_complete(), 3); // return
 /// ```
 pub trait Sans<I, O> {
     /// Type of final result when computation completes
-    type Done;
+    type Return;
 
-    /// Process input, returning `Yield` to continue or `Done` to complete.
-    fn next(&mut self, input: I) -> Step<O, Self::Done>;
+    /// Process input, returning `Yield` to continue or `Return` to complete.
+    fn next(&mut self, input: I) -> Step<O, Self::Return>;
 
-    fn and_then<R, F>(self, f: F) -> AndThen<Self, R::Next, F>
+    fn and_then<T, F>(self, f: F) -> AndThen<Self, T::Next, F>
     where
-        Self: Sized + Sans<I, O, Done = I>,
-        R: InitSans<I, O>,
-        R::Next: Sans<I, O>,
-        F: FnOnce(Self::Done) -> R,
+        Self: Sized + Sans<I, O, Return = I>,
+        T: InitSans<I, O>,
+        F: FnOnce(Self::Return) -> T,
     {
-        AndThen::OnFirst(self, Some(f))
+        and_then(self, f)
     }
 
-    fn boxed(self) -> Box<dyn Sans<I, O, Done = Self::Done>>
+    fn boxed(self) -> Box<dyn Sans<I, O, Return = Self::Return>>
     where
         Self: Sized + 'static,
     {
@@ -50,7 +49,7 @@ pub trait Sans<I, O> {
     /// Chain with another continuation.
     fn chain<R>(self, r: R) -> Chain<Self, R>
     where
-        Self: Sized + Sans<I, O, Done = I>,
+        Self: Sized + Sans<I, O, Return = I>,
         R: Sans<I, O>,
     {
         chain(self, r)
@@ -59,8 +58,8 @@ pub trait Sans<I, O> {
     /// Chain with a function that executes once.
     fn chain_once<F>(self, f: F) -> Chain<Self, Once<F>>
     where
-        Self: Sized + Sans<I, O, Done = I>,
-        F: FnOnce(Self::Done) -> O,
+        Self: Sized + Sans<I, O, Return = I>,
+        F: FnOnce(Self::Return) -> O,
     {
         chain(self, once(f))
     }
@@ -68,8 +67,8 @@ pub trait Sans<I, O> {
     /// Chain with a function that repeats indefinitely.
     fn chain_repeat<F>(self, f: F) -> Chain<Self, Repeat<F>>
     where
-        Self: Sized + Sans<I, O, Done = I>,
-        F: FnMut(Self::Done) -> O,
+        Self: Sized + Sans<I, O, Return = I>,
+        F: FnMut(Self::Return) -> O,
     {
         chain(self, repeat(f))
     }
@@ -93,12 +92,12 @@ pub trait Sans<I, O> {
     }
 
     /// Transform the final result when completing.
-    fn map_done<D2, F>(self, f: F) -> MapDone<Self, F>
+    fn map_return<D2, F>(self, f: F) -> MapReturn<Self, F>
     where
         Self: Sized,
-        F: FnMut(Self::Done) -> D2,
+        F: FnMut(Self::Return) -> D2,
     {
-        crate::combinators::map::map_done(f, self)
+        crate::combinators::map::map_return(f, self)
     }
 }
 
@@ -117,8 +116,8 @@ impl<I, O, C> Sans<I, O> for Arc<Mutex<C>>
 where
     C: Sans<I, O>,
 {
-    type Done = Result<C::Done, PoisonError>;
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    type Return = Result<C::Return, PoisonError>;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         match self.lock().map_err(|_| PoisonError) {
             Ok(mut f) => f.next(input).map_complete(Ok),
             Err(e) => Step::Complete(Err(e)),
@@ -130,8 +129,8 @@ impl<I, O, C> Sans<I, O> for Rc<RefCell<C>>
 where
     C: Sans<I, O>,
 {
-    type Done = C::Done;
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    type Return = C::Return;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         let mut v = self.as_ref().borrow_mut();
         v.next(input)
     }
@@ -140,10 +139,10 @@ where
 impl<I, O, L, R> Sans<I, O> for either::Either<L, R>
 where
     L: Sans<I, O>,
-    R: Sans<I, O, Done = L::Done>,
+    R: Sans<I, O, Return = L::Return>,
 {
-    type Done = L::Done;
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    type Return = L::Return;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         match self {
             either::Either::Left(l) => l.next(input),
             either::Either::Right(r) => r.next(input),
@@ -151,18 +150,18 @@ where
     }
 }
 
-impl<I, O, D> Sans<I, O> for Box<dyn Sans<I, O, Done = D>> {
-    type Done = D;
+impl<I, O, D> Sans<I, O> for Box<dyn Sans<I, O, Return = D>> {
+    type Return = D;
 
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         (**self).next(input)
     }
 }
 
-impl<I, O, D> Sans<I, O> for &'_ mut dyn Sans<I, O, Done = D> {
-    type Done = D;
+impl<I, O, D> Sans<I, O> for &'_ mut dyn Sans<I, O, Return = D> {
+    type Return = D;
 
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         (*self).next(input)
     }
 }
@@ -192,7 +191,7 @@ mod tests {
     #[test]
     fn test_map_done_applies_after_chain_completion() {
         let mut stage = chain(once(|val: u32| val + 1), once(|val: u32| val * 2))
-            .map_done(|done: u32| format!("resume={done}"));
+            .map_return(|done: u32| format!("resume={done}"));
 
         assert_eq!(stage.next(5).unwrap_yielded(), 6);
         assert_eq!(stage.next(6).unwrap_yielded(), 12);

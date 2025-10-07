@@ -6,8 +6,8 @@ impl<I, O, D, F> Sans<I, O> for FromFn<F>
 where
     F: FnMut(I) -> Step<O, D>,
 {
-    type Done = D;
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    type Return = D;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         (self.0)(input)
     }
 }
@@ -36,8 +36,8 @@ impl<I, O, F> Sans<I, O> for Repeat<F>
 where
     F: FnMut(I) -> O,
 {
-    type Done = I;
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    type Return = I;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         Step::Yielded(self.0(input))
     }
 }
@@ -78,8 +78,8 @@ impl<I, O, F> Sans<I, O> for Once<F>
 where
     F: FnOnce(I) -> O,
 {
-    type Done = I;
-    fn next(&mut self, input: I) -> Step<O, Self::Done> {
+    type Return = I;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
         match self.0.take() {
             Some(f) => Step::Yielded(f(input)),
             None => Step::Complete(input),
