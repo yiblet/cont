@@ -5,13 +5,13 @@
 //!
 //! ## Core Traits
 //!
-//! - **[`Sans<A>`]**: Stateful computations that process input and yield values
-//! - **[`InitSans<A>`]**: Computations that provide initial output before processing input
+//! - **[`Sans<I, O>`]**: Stateful computations that process input and yield values
+//! - **[`InitSans<I, O>`]**: Computations that provide initial output before processing input
 //!
 //! ## Key Features
 //!
 //! - **Composable**: Chain stages together with `.chain()`
-//! - **Transformable**: Use `.map_input()`, `.map_yielded()`, `.map_complete()`
+//! - **Transformable**: Use `.map_input()`, `.map_yield()`, `.map_done()`
 //! - **Async Support**: Both sync and async execution with `handle()` and `handle_async()`
 //!
 //! ## Example
@@ -24,7 +24,7 @@
 //!     .chain(once(|x: i32| x + 1));              // Adds 1 to input, then completes
 //!
 //! // Drive the pipeline with responses to each yield
-//! let result = handle(pipeline, |yielded| yielded + 5);
+//! let result = handle(pipeline, |output| output + 5);
 //! ```
 //!
 //! ## Common Functions

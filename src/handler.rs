@@ -12,19 +12,19 @@ use std::future::Future;
 ///
 /// Executes the initial `InitSans` stage and continues driving the resulting
 /// continuation until completion, calling the responder for each yield.
-pub fn handle_init_sync<S, A, R>(stage: S, mut responder: R) -> <S::Next as Sans<A>>::Done
+pub fn handle_init_sync<S, I, O, R>(stage: S, mut responder: R) -> <S::Next as Sans<I, O>>::Done
 where
-    S: InitSans<A>,
-    S::Next: Sans<A>,
-    R: FnMut(<S::Next as Sans<A>>::Yield) -> A,
+    S: InitSans<I, O>,
+    S::Next: Sans<I, O>,
+    R: FnMut(O) -> I,
 {
     match stage.first() {
-        Step::Yielded((yielded, mut next_stage)) => {
-            let mut input = responder(yielded);
+        Step::Yielded((output, mut next_stage)) => {
+            let mut input = responder(output);
             loop {
                 match next_stage.next(input) {
-                    Step::Yielded(yielded) => {
-                        input = responder(yielded);
+                    Step::Yielded(output) => {
+                        input = responder(output);
                     }
                     Step::Complete(done) => return done,
                 }
@@ -37,15 +37,15 @@ where
 /// Drive a continuation to completion with synchronous responses.
 ///
 /// Takes an existing continuation with initial input and drives it to completion.
-pub fn handle_cont_sync<C, A, R>(mut stage: C, mut input: A, mut responder: R) -> C::Done
+pub fn handle_cont_sync<C, I, O, R>(mut stage: C, mut input: I, mut responder: R) -> C::Done
 where
-    C: Sans<A>,
-    R: FnMut(C::Yield) -> A,
+    C: Sans<I, O>,
+    R: FnMut(O) -> I,
 {
     loop {
         match stage.next(input) {
-            Step::Yielded(yielded) => {
-                input = responder(yielded);
+            Step::Yielded(output) => {
+                input = responder(output);
             }
             Step::Complete(done) => return done,
         }
@@ -55,20 +55,20 @@ where
 /// Async version of `handle_cont_sync`.
 ///
 /// The responder function returns a future that produces the next input.
-pub async fn handle_cont_async<C, A, R, Fut>(
+pub async fn handle_cont_async<C, I, O, R, Fut>(
     mut stage: C,
-    mut input: A,
+    mut input: I,
     mut responder: R,
 ) -> C::Done
 where
-    C: Sans<A>,
-    R: FnMut(C::Yield) -> Fut,
-    Fut: Future<Output = A>,
+    C: Sans<I, O>,
+    R: FnMut(O) -> Fut,
+    Fut: Future<Output = I>,
 {
     loop {
         match stage.next(input) {
-            Step::Yielded(yielded) => {
-                input = responder(yielded).await;
+            Step::Yielded(output) => {
+                input = responder(output).await;
             }
             Step::Complete(done) => return done,
         }
@@ -78,23 +78,23 @@ where
 /// Async version of `handle_init_sync`.
 ///
 /// The responder function returns a future that produces the next input.
-pub async fn handle_init_async<S, A, R, Fut>(
+pub async fn handle_init_async<S, I, O, R, Fut>(
     stage: S,
     mut responder: R,
-) -> <S::Next as Sans<A>>::Done
+) -> <S::Next as Sans<I, O>>::Done
 where
-    S: InitSans<A>,
-    S::Next: Sans<A>,
-    R: FnMut(<S::Next as Sans<A>>::Yield) -> Fut,
-    Fut: Future<Output = A>,
+    S: InitSans<I, O>,
+    S::Next: Sans<I, O>,
+    R: FnMut(O) -> Fut,
+    Fut: Future<Output = I>,
 {
     match stage.first() {
-        Step::Yielded((yielded, mut next_stage)) => {
-            let mut input = responder(yielded).await;
+        Step::Yielded((output, mut next_stage)) => {
+            let mut input = responder(output).await;
             loop {
                 match next_stage.next(input) {
-                    Step::Yielded(yielded) => {
-                        input = responder(yielded).await;
+                    Step::Yielded(output) => {
+                        input = responder(output).await;
                     }
                     Step::Complete(done) => return done,
                 }
@@ -112,13 +112,13 @@ where
 /// use cont::*;
 ///
 /// let pipeline = init_once(10, |x: i32| x * 2).chain(once(|x: i32| x + 1));
-/// let result = handle(pipeline, |yielded| yielded + 5);
+/// let result = handle(pipeline, |output| output + 5);
 /// ```
-pub fn handle<S, A, R>(stage: S, responder: R) -> <S::Next as Sans<A>>::Done
+pub fn handle<S, I, O, R>(stage: S, responder: R) -> <S::Next as Sans<I, O>>::Done
 where
-    S: InitSans<A>,
-    S::Next: Sans<A>,
-    R: FnMut(<S::Next as Sans<A>>::Yield) -> A,
+    S: InitSans<I, O>,
+    S::Next: Sans<I, O>,
+    R: FnMut(O) -> I,
 {
     handle_init_sync(stage, responder)
 }
@@ -126,12 +126,12 @@ where
 /// Async version of `handle`.
 ///
 /// Works with responder functions that return futures.
-pub async fn handle_async<S, A, R, Fut>(stage: S, responder: R) -> <S::Next as Sans<A>>::Done
+pub async fn handle_async<S, I, O, R, Fut>(stage: S, responder: R) -> <S::Next as Sans<I, O>>::Done
 where
-    S: InitSans<A>,
-    S::Next: Sans<A>,
-    R: FnMut(<S::Next as Sans<A>>::Yield) -> Fut,
-    Fut: Future<Output = A>,
+    S: InitSans<I, O>,
+    S::Next: Sans<I, O>,
+    R: FnMut(O) -> Fut,
+    Fut: Future<Output = I>,
 {
     handle_init_async(stage, responder).await
 }

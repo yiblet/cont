@@ -2,13 +2,12 @@ use crate::{Sans, step::Step};
 
 pub struct FromFn<F>(F);
 
-impl<A, Y, D, F> Sans<A> for FromFn<F>
+impl<I, O, D, F> Sans<I, O> for FromFn<F>
 where
-    F: FnMut(A) -> Step<Y, D>,
+    F: FnMut(I) -> Step<O, D>,
 {
-    type Yield = Y;
     type Done = D;
-    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
+    fn next(&mut self, input: I) -> Step<O, Self::Done> {
         (self.0)(input)
     }
 }
@@ -33,13 +32,12 @@ pub fn from_fn<F>(f: F) -> FromFn<F> {
 /// Never completes on its own - will continue processing until externally stopped.
 pub struct Repeat<F>(F);
 
-impl<A, Y, F> Sans<A> for Repeat<F>
+impl<I, O, F> Sans<I, O> for Repeat<F>
 where
-    F: FnMut(A) -> Y,
+    F: FnMut(I) -> O,
 {
-    type Yield = Y;
-    type Done = A;
-    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
+    type Done = I;
+    fn next(&mut self, input: I) -> Step<O, Self::Done> {
         Step::Yielded(self.0(input))
     }
 }
@@ -54,7 +52,7 @@ where
 /// assert_eq!(doubler.next(3).unwrap_yielded(), 6);
 /// // Continues forever...
 /// ```
-pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
+pub fn repeat<I, O, F: FnMut(I) -> O>(f: F) -> Repeat<F> {
     Repeat(f)
 }
 
@@ -76,13 +74,12 @@ pub fn once<F>(f: F) -> Once<F> {
     Once(Some(f))
 }
 
-impl<A, Y, F> Sans<A> for Once<F>
+impl<I, O, F> Sans<I, O> for Once<F>
 where
-    F: FnOnce(A) -> Y,
+    F: FnOnce(I) -> O,
 {
-    type Yield = Y;
-    type Done = A;
-    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
+    type Done = I;
+    fn next(&mut self, input: I) -> Step<O, Self::Done> {
         match self.0.take() {
             Some(f) => Step::Yielded(f(input)),
             None => Step::Complete(input),

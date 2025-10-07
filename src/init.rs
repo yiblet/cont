@@ -1,5 +1,6 @@
 use crate::{
-    Chain, FromFn, MapDone, MapInput, MapYield, Once, Repeat, Sans, Step, chain, from_fn, map_done, map_input, map_yield, once, repeat,
+    Chain, FromFn, MapDone, MapInput, MapYield, Once, Repeat, Sans, Step, chain, from_fn, map_done,
+    map_input, map_yield, once, repeat,
 };
 
 /// Computations that yield an initial value before processing input.
@@ -14,8 +15,8 @@ use crate::{
 /// let (initial, mut cont) = stage.first().unwrap_yielded();
 /// assert_eq!(initial, 42);
 /// ```
-pub trait InitSans<A> {
-    type Next: Sans<A>;
+pub trait InitSans<I, O> {
+    type Next: Sans<I, O>;
 
     /// Execute the first stage.
     ///
@@ -24,20 +25,20 @@ pub trait InitSans<A> {
     #[allow(clippy::type_complexity)]
     fn first(
         self,
-    ) -> Step<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done>;
+    ) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Done>;
 
     /// Chain with a continuation.
     fn chain<R>(
         self,
         r: R,
-    ) -> Step<(<Self::Next as Sans<A>>::Yield, Chain<Self::Next, R>), <Self::Next as Sans<A>>::Done>
+    ) -> Step<(O, Chain<Self::Next, R>), <Self::Next as Sans<I, O>>::Done>
     where
         Self: Sized,
-        Self::Next: Sans<A, Done = A>,
-        R: Sans<A, Yield = <Self::Next as Sans<A>>::Yield>,
+        Self::Next: Sans<I, O, Done = I>,
+        R: Sans<I, O>,
     {
         match self.first() {
-            Step::Yielded((y, next)) => Step::Yielded((y, chain(next, r))),
+            Step::Yielded((o, next)) => Step::Yielded((o, chain(next, r))),
             Step::Complete(d) => Step::Complete(d),
         }
     }
@@ -47,13 +48,13 @@ pub trait InitSans<A> {
         self,
         f: F,
     ) -> Step<
-        (<Self::Next as Sans<A>>::Yield, Chain<Self::Next, Once<F>>),
-        <Self::Next as Sans<A>>::Done,
+        (O, Chain<Self::Next, Once<F>>),
+        <Self::Next as Sans<I, O>>::Done,
     >
     where
         Self: Sized,
-        Self::Next: Sans<A, Done = A>,
-        F: FnOnce(<Self::Next as Sans<A>>::Done) -> <Self::Next as Sans<A>>::Yield,
+        Self::Next: Sans<I, O, Done = I>,
+        F: FnOnce(<Self::Next as Sans<I, O>>::Done) -> O,
     {
         self.chain(once(f))
     }
@@ -63,48 +64,48 @@ pub trait InitSans<A> {
         self,
         f: F,
     ) -> Step<
-        (<Self::Next as Sans<A>>::Yield, Chain<Self::Next, Repeat<F>>),
-        <Self::Next as Sans<A>>::Done,
+        (O, Chain<Self::Next, Repeat<F>>),
+        <Self::Next as Sans<I, O>>::Done,
     >
     where
         Self: Sized,
-        Self::Next: Sans<A, Done = A>,
-        F: FnMut(<Self::Next as Sans<A>>::Done) -> <Self::Next as Sans<A>>::Yield,
+        Self::Next: Sans<I, O, Done = I>,
+        F: FnMut(<Self::Next as Sans<I, O>>::Done) -> O,
     {
         self.chain(repeat(f))
     }
 
     /// Transform inputs before they reach the underlying continuation.
-    fn map_input<A2, F>(
+    fn map_input<I2, F>(
         self,
         f: F,
     ) -> Step<
-        (<Self::Next as Sans<A>>::Yield, MapInput<Self::Next, F>),
-        <Self::Next as Sans<A>>::Done,
+        (O, MapInput<Self::Next, F>),
+        <Self::Next as Sans<I, O>>::Done,
     >
     where
         Self: Sized,
-        F: FnMut(A2) -> A,
+        F: FnMut(I2) -> I,
     {
         match self.first() {
-            Step::Yielded((y, next)) => Step::Yielded((y, map_input(f, next))),
+            Step::Yielded((o, next)) => Step::Yielded((o, map_input(f, next))),
             Step::Complete(d) => Step::Complete(d),
         }
     }
 
     /// Transform yielded values before returning them.
-    fn map_yield<Y2, F>(
+    fn map_yield<O2, F>(
         self,
         mut f: F,
-    ) -> Step<(Y2, MapYield<Self::Next, F>), <Self::Next as Sans<A>>::Done>
+    ) -> Step<(O2, MapYield<Self::Next, F, I, O>), <Self::Next as Sans<I, O>>::Done>
     where
         Self: Sized,
-        F: FnMut(<Self::Next as Sans<A>>::Yield) -> Y2,
+        F: FnMut(O) -> O2,
     {
         match self.first() {
-            Step::Yielded((y, next)) => {
-                let mapped_y = f(y);
-                Step::Yielded((mapped_y, map_yield(f, next)))
+            Step::Yielded((o, next)) => {
+                let mapped_o = f(o);
+                Step::Yielded((mapped_o, map_yield(f, next)))
             }
             Step::Complete(d) => Step::Complete(d),
         }
@@ -114,55 +115,55 @@ pub trait InitSans<A> {
     fn map_done<D2, F>(
         self,
         mut f: F,
-    ) -> Step<(<Self::Next as Sans<A>>::Yield, MapDone<Self::Next, F>), D2>
+    ) -> Step<(O, MapDone<Self::Next, F>), D2>
     where
         Self: Sized,
-        F: FnMut(<Self::Next as Sans<A>>::Done) -> D2,
+        F: FnMut(<Self::Next as Sans<I, O>>::Done) -> D2,
     {
         match self.first() {
-            Step::Yielded((y, next)) => Step::Yielded((y, map_done(f, next))),
+            Step::Yielded((o, next)) => Step::Yielded((o, map_done(f, next))),
             Step::Complete(d) => Step::Complete(f(d)),
         }
     }
 }
 
-impl<A, Y, S> InitSans<A> for (Y, S)
+impl<I, O, S> InitSans<I, O> for (O, S)
 where
-    S: Sans<A, Yield = Y>,
+    S: Sans<I, O>,
 {
     type Next = S;
-    fn first(self) -> Step<(Y, S), S::Done> {
+    fn first(self) -> Step<(O, S), S::Done> {
         Step::Yielded(self)
     }
 }
 
-impl<A, S> InitSans<A> for Step<(S::Yield, S), S::Done>
+impl<I, O, S> InitSans<I, O> for Step<(O, S), S::Done>
 where
-    S: Sans<A>,
+    S: Sans<I, O>,
 {
     type Next = S;
-    fn first(self) -> Step<(S::Yield, S), S::Done> {
+    fn first(self) -> Step<(O, S), S::Done> {
         self
     }
 }
 
-impl<A, L, R> InitSans<A> for either::Either<L, R>
+impl<I, O, L, R> InitSans<I, O> for either::Either<L, R>
 where
-    L: InitSans<A>,
-    R: InitSans<A>,
-    R::Next: Sans<A, Done = <L::Next as Sans<A>>::Done, Yield = <L::Next as Sans<A>>::Yield>,
+    L: InitSans<I, O>,
+    R: InitSans<I, O>,
+    R::Next: Sans<I, O, Done = <L::Next as Sans<I, O>>::Done>,
 {
     type Next = either::Either<L::Next, R::Next>;
     fn first(
         self,
-    ) -> Step<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done> {
+    ) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Done> {
         match self {
             either::Either::Left(l) => match l.first() {
-                Step::Yielded((y, next_l)) => Step::Yielded((y, either::Either::Left(next_l))),
+                Step::Yielded((o, next_l)) => Step::Yielded((o, either::Either::Left(next_l))),
                 Step::Complete(resume) => Step::Complete(resume),
             },
             either::Either::Right(r) => match r.first() {
-                Step::Yielded((y, next_r)) => Step::Yielded((y, either::Either::Right(next_r))),
+                Step::Yielded((o, next_r)) => Step::Yielded((o, either::Either::Right(next_r))),
                 Step::Complete(resume) => Step::Complete(resume),
             },
         }
@@ -172,10 +173,10 @@ where
 /// Chain an `InitSans` stage with a continuation.
 ///
 /// Allows connecting stages that have initial yields with regular continuations.
-pub fn init_chain<A, Y, L, R>(first: (Y, L), r: R) -> (Y, Chain<L, R>)
+pub fn init_chain<I, O, L, R>(first: (O, L), r: R) -> (O, Chain<L, R>)
 where
-    L: Sans<A, Done = A, Yield = Y>,
-    R: Sans<A, Yield = Y>,
+    L: Sans<I, O, Done = I>,
+    R: Sans<I, O>,
 {
     (first.0, chain(first.1, r))
 }
@@ -183,15 +184,15 @@ where
 /// Yield an initial value, then apply a function once.
 ///
 /// Combines immediate output with single function application.
-pub fn init_once<A, Y, F: FnOnce(A) -> Y>(y: Y, f: F) -> (Y, Once<F>) {
-    (y, once(f))
+pub fn init_once<I, O, F: FnOnce(I) -> O>(o: O, f: F) -> (O, Once<F>) {
+    (o, once(f))
 }
 
 /// Yield an initial value, then apply a function indefinitely.
 ///
 /// Useful for generators that need to emit a seed value before starting their loop.
-pub fn init_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
-    (y, repeat(f))
+pub fn init_repeat<I, O, F: FnMut(I) -> O>(o: O, f: F) -> (O, Repeat<F>) {
+    (o, repeat(f))
 }
 
 /// Yield an initial value, then create a continuation from a closure.
@@ -209,9 +210,9 @@ pub fn init_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
 /// assert_eq!(stage.next(10).unwrap_yielded(), 20);
 /// assert_eq!(stage.next(10).unwrap_complete(), 13);
 /// ```
-pub fn init_from_fn<A, Y, D, F>(initial: Y, f: F) -> (Y, FromFn<F>)
+pub fn init_from_fn<I, O, D, F>(initial: O, f: F) -> (O, FromFn<F>)
 where
-    F: FnMut(A) -> Step<Y, D>,
+    F: FnMut(I) -> Step<O, D>,
 {
     (initial, from_fn(f))
 }
@@ -228,23 +229,22 @@ mod tests {
     #[derive(Clone, Copy, Debug)]
     struct ImmediateFirstDone;
 
-    impl Sans<&'static str> for ImmediateFirstDone {
-        type Yield = &'static str;
+    impl Sans<&'static str, &'static str> for ImmediateFirstDone {
         type Done = &'static str;
 
-        fn next(&mut self, input: &'static str) -> Step<Self::Yield, Self::Done> {
+        fn next(&mut self, input: &'static str) -> Step<&'static str, Self::Done> {
             Step::Complete(input)
         }
     }
 
-    impl InitSans<&'static str> for ImmediateFirstDone {
+    impl InitSans<&'static str, &'static str> for ImmediateFirstDone {
         type Next = Self;
 
         fn first(
             self,
         ) -> Step<
-            (<Self::Next as Sans<&'static str>>::Yield, Self::Next),
-            <Self::Next as Sans<&'static str>>::Done,
+            (&'static str, Self::Next),
+            <Self::Next as Sans<&'static str, &'static str>>::Done,
         > {
             Step::Complete("left-done")
         }
