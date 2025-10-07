@@ -39,11 +39,13 @@
 //! - [`handle(stage, responder)`] - Drive computation with sync responses
 //! - [`handle_async(stage, responder)`] - Drive computation with async responses
 
+mod combinators;
 mod handler;
 mod init;
 mod sans;
 mod step;
 
+pub use combinators::*;
 pub use handler::*;
 pub use init::*;
 pub use sans::*;

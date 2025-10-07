@@ -1,5 +1,5 @@
 use crate::{
-    Chain, FromFn, MapDone, MapInput, MapYield, Once, Repeat, Sans, Step, chain, once, repeat,
+    Chain, FromFn, MapDone, MapInput, MapYield, Once, Repeat, Sans, Step, chain, from_fn, map_done, map_input, map_yield, once, repeat,
 };
 
 /// Computations that yield an initial value before processing input.
@@ -87,7 +87,7 @@ pub trait InitSans<A> {
         F: FnMut(A2) -> A,
     {
         match self.first() {
-            Step::Yielded((y, next)) => Step::Yielded((y, MapInput { f, stage: next })),
+            Step::Yielded((y, next)) => Step::Yielded((y, map_input(f, next))),
             Step::Complete(d) => Step::Complete(d),
         }
     }
@@ -104,7 +104,7 @@ pub trait InitSans<A> {
         match self.first() {
             Step::Yielded((y, next)) => {
                 let mapped_y = f(y);
-                Step::Yielded((mapped_y, MapYield { f, stage: next }))
+                Step::Yielded((mapped_y, map_yield(f, next)))
             }
             Step::Complete(d) => Step::Complete(d),
         }
@@ -120,7 +120,7 @@ pub trait InitSans<A> {
         F: FnMut(<Self::Next as Sans<A>>::Done) -> D2,
     {
         match self.first() {
-            Step::Yielded((y, next)) => Step::Yielded((y, MapDone { f, stage: next })),
+            Step::Yielded((y, next)) => Step::Yielded((y, map_done(f, next))),
             Step::Complete(d) => Step::Complete(f(d)),
         }
     }
@@ -213,7 +213,7 @@ pub fn init_from_fn<A, Y, D, F>(initial: Y, f: F) -> (Y, FromFn<F>)
 where
     F: FnMut(A) -> Step<Y, D>,
 {
-    (initial, FromFn(f))
+    (initial, from_fn(f))
 }
 
 #[cfg(test)]
@@ -341,7 +341,7 @@ mod tests {
         let (first_value, mut stage) = (first
             .map_yield(|resume: u32| (resume + 7) as i32)
             .map_done(|done: u32| done as i32 * 3))
-            .unwrap_yielded();
+        .unwrap_yielded();
 
         assert_eq!(49, first_value);
         assert_eq!(18, stage.next(10).unwrap_yielded());

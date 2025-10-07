@@ -279,9 +279,7 @@ mod tests {
     #[test]
     fn test_handle_async_shortcut_for_cont_with_input_helper() {
         let stage = once(|n: u32| n + 2);
-        let done = block_on(handle_async((1_u32, stage), |value: u32| {
-            ready(value + 1)
-        }));
+        let done = block_on(handle_async((1_u32, stage), |value: u32| ready(value + 1)));
         assert_eq!(done, 5);
     }
 }

@@ -5,7 +5,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::step::Step;
+use crate::{
+    InitSans,
+    step::Step,
+    combinators::{
+        chain, repeat, once,
+        AndThen, Chain, MapDone, MapInput, MapYield, Once, Repeat,
+    },
+};
 
 /// Core trait for stateful computations that process input and yield intermediate values.
 ///
@@ -28,6 +35,23 @@ pub trait Sans<A> {
     /// Process input, returning `Yield` to continue or `Done` to complete.
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done>;
 
+    fn and_then<R, F>(self, f: F) -> AndThen<Self, R::Next, F>
+    where
+        Self: Sized + Sans<A, Done = A>,
+        R: InitSans<A>,
+        R::Next: Sans<A, Yield = Self::Yield>,
+        F: FnOnce(Self::Done) -> R,
+    {
+        AndThen::OnFirst(self, Some(f))
+    }
+
+    fn boxed(self) -> Box<dyn Sans<A, Yield = Self::Yield, Done = Self::Done>>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+
     /// Chain with another continuation.
     fn chain<R>(self, r: R) -> Chain<Self, R>
     where
@@ -43,7 +67,7 @@ pub trait Sans<A> {
         Self: Sized + Sans<A, Done = A>,
         F: FnOnce(Self::Done) -> Self::Yield,
     {
-        chain(self, Once::new(f))
+        chain(self, once(f))
     }
 
     /// Chain with a function that repeats indefinitely.
@@ -61,7 +85,7 @@ pub trait Sans<A> {
         Self: Sized,
         F: FnMut(A2) -> A,
     {
-        MapInput { f, stage: self }
+        crate::combinators::map::map_input(f, self)
     }
 
     /// Transform yielded values before returning them.
@@ -70,7 +94,7 @@ pub trait Sans<A> {
         Self: Sized,
         F: FnMut(Self::Yield) -> Y2,
     {
-        MapYield { f, stage: self }
+        crate::combinators::map::map_yield(f, self)
     }
 
     /// Transform the final result when completing.
@@ -79,7 +103,7 @@ pub trait Sans<A> {
         Self: Sized,
         F: FnMut(Self::Done) -> D2,
     {
-        MapDone { f, stage: self }
+        crate::combinators::map::map_done(f, self)
     }
 }
 
@@ -120,19 +144,6 @@ where
     }
 }
 
-pub struct FromFn<F>(pub F);
-
-impl<A, Y, D, F> Sans<A> for FromFn<F>
-where
-    F: FnMut(A) -> Step<Y, D>,
-{
-    type Yield = Y;
-    type Done = D;
-    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
-        (self.0)(input)
-    }
-}
-
 impl<A, L, R> Sans<A> for either::Either<L, R>
 where
     L: Sans<A>,
@@ -148,193 +159,22 @@ where
     }
 }
 
-/// Applies a function to each input, yielding results indefinitely.
-///
-/// Never completes on its own - will continue processing until externally stopped.
-pub struct Repeat<F>(F);
-
-impl<A, Y, F> Sans<A> for Repeat<F>
-where
-    F: FnMut(A) -> Y,
-{
+impl<A, Y, D> Sans<A> for Box<dyn Sans<A, Yield = Y, Done = D>> {
     type Yield = Y;
-    type Done = A;
+    type Done = D;
+
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
-        Step::Yielded(self.0(input))
+        (**self).next(input)
     }
 }
 
-/// Applies a function once, then completes on subsequent calls.
-///
-/// First call yields the function result, subsequent calls return `Done(input)`.
-pub struct Once<F>(Option<F>);
-
-/// Create a continuation that applies a function once.
-///
-/// ```rust
-/// use cont::*;
-///
-/// let mut stage = once(|x: i32| x + 10);
-/// assert_eq!(stage.next(5).unwrap_yielded(), 15);
-/// assert_eq!(stage.next(3).unwrap_complete(), 3); // Done
-/// ```
-pub fn once<F>(f: F) -> Once<F> {
-    Once(Some(f))
-}
-
-impl<F> Once<F> {
-    pub fn new(f: F) -> Once<F> {
-        Once(Some(f))
-    }
-}
-
-impl<A, Y, F> Sans<A> for Once<F>
-where
-    F: FnOnce(A) -> Y,
-{
+impl<A, Y, D> Sans<A> for &'_ mut dyn Sans<A, Yield = Y, Done = D> {
     type Yield = Y;
-    type Done = A;
+    type Done = D;
+
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
-        match self.0.take() {
-            Some(f) => Step::Yielded(f(input)),
-            None => Step::Complete(input),
-        }
+        (*self).next(input)
     }
-}
-
-/// Run the first continuation to completion, then feed its result to the second.
-///
-/// The first stage's `Done` value becomes the input to the second stage.
-/// Both stages must yield the same type.
-pub fn chain<A, L, R>(l: L, r: R) -> Chain<L, R>
-where
-    L: Sans<A, Done = A>,
-    R: Sans<A, Yield = L::Yield>,
-{
-    Chain(Some(l), r)
-}
-
-/// Chains two stages sequentially.
-///
-/// Created via `chain()` or `first_chain()`. The first stage is dropped from memory
-/// once it completes to free resources.
-pub struct Chain<S1, S2>(Option<S1>, S2);
-
-impl<A, L, R> Sans<A> for Chain<L, R>
-where
-    L: Sans<A, Done = A>,
-    R: Sans<A, Yield = L::Yield>,
-{
-    type Yield = L::Yield;
-    type Done = R::Done;
-    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
-        match self.0 {
-            Some(ref mut l) => match l.next(input) {
-                Step::Yielded(y) => Step::Yielded(y),
-                Step::Complete(a) => {
-                    self.0 = None; // we drop the old stage when it's done
-                    self.1.next(a)
-                }
-            },
-            None => self.1.next(input),
-        }
-    }
-}
-
-/// Transforms input before passing it to the wrapped stage.
-///
-/// Useful for adapting between different input types or preprocessing data.
-pub struct MapInput<S, F> {
-    pub f: F,
-    pub stage: S,
-}
-
-impl<A1, A2, S, F> Sans<A1> for MapInput<S, F>
-where
-    S: Sans<A2>,
-    F: FnMut(A1) -> A2,
-{
-    type Yield = S::Yield;
-    type Done = S::Done;
-    fn next(&mut self, input: A1) -> Step<Self::Yield, Self::Done> {
-        let a2 = (self.f)(input);
-        self.stage.next(a2)
-    }
-}
-
-/// Transforms yielded values from the wrapped stage.
-///
-/// Allows converting or formatting output without changing the underlying computation.
-pub struct MapYield<S, F> {
-    pub f: F,
-    pub stage: S,
-}
-
-impl<A, Y1, Y2, S, F> Sans<A> for MapYield<S, F>
-where
-    S: Sans<A, Yield = Y1>,
-    F: FnMut(Y1) -> Y2,
-{
-    type Yield = Y2;
-    type Done = S::Done;
-    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
-        match self.stage.next(input) {
-            Step::Yielded(y1) => Step::Yielded((self.f)(y1)),
-            Step::Complete(a) => Step::Complete(a),
-        }
-    }
-}
-
-/// Transforms the final result from the wrapped stage.
-///
-/// Applied only when the computation completes, not to intermediate yields.
-pub struct MapDone<S, F> {
-    pub f: F,
-    pub stage: S,
-}
-
-impl<A, Y, D1, D2, S, F> Sans<A> for MapDone<S, F>
-where
-    S: Sans<A, Yield = Y, Done = D1>,
-    F: FnMut(D1) -> D2,
-{
-    type Yield = Y;
-    type Done = D2;
-    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
-        match self.stage.next(input) {
-            Step::Yielded(y) => Step::Yielded(y),
-            Step::Complete(r1) => Step::Complete((self.f)(r1)),
-        }
-    }
-}
-
-/// Create a continuation that applies a function indefinitely.
-///
-/// ```rust
-/// use cont::*;
-///
-/// let mut doubler = repeat(|x: i32| x * 2);
-/// assert_eq!(doubler.next(5).unwrap_yielded(), 10);
-/// assert_eq!(doubler.next(3).unwrap_yielded(), 6);
-/// // Continues forever...
-/// ```
-pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
-    Repeat(f)
-}
-
-/// Create a continuation from a closure.
-///
-/// ```rust
-/// use cont::*;
-///
-/// let mut toggle = from_fn(|x: bool| {
-///     if x { Step::Yielded(!x) } else { Step::Complete(x) }
-/// });
-/// assert_eq!(toggle.next(true).unwrap_yielded(), false);
-/// assert_eq!(toggle.next(false).unwrap_complete(), false);
-/// ```
-pub fn from_fn<F>(f: F) -> FromFn<F> {
-    FromFn(f)
 }
 
 #[cfg(test)]
