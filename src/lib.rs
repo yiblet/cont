@@ -46,7 +46,9 @@
 mod handler;
 mod init;
 mod sans;
+mod step;
 
 pub use handler::*;
 pub use init::*;
 pub use sans::*;
+pub use step::*;

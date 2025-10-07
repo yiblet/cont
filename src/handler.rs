@@ -5,7 +5,7 @@
 
 use crate::init::InitSans;
 use crate::sans::Sans;
-use either::Either;
+use crate::step::Step;
 use std::future::Future;
 
 /// Drive an `InitSans` stage to completion with synchronous responses.
@@ -19,18 +19,18 @@ where
     R: FnMut(<S::Next as Sans<A>>::Yield) -> A,
 {
     match stage.first() {
-        Either::Left((yielded, mut next_stage)) => {
+        Step::Yield((yielded, mut next_stage)) => {
             let mut input = responder(yielded);
             loop {
                 match next_stage.next(input) {
-                    Either::Left(yielded) => {
+                    Step::Yield(yielded) => {
                         input = responder(yielded);
                     }
-                    Either::Right(done) => return done,
+                    Step::Done(done) => return done,
                 }
             }
         }
-        Either::Right(done) => done,
+        Step::Done(done) => done,
     }
 }
 
@@ -44,10 +44,10 @@ where
 {
     loop {
         match stage.next(input) {
-            Either::Left(yielded) => {
+            Step::Yield(yielded) => {
                 input = responder(yielded);
             }
-            Either::Right(done) => return done,
+            Step::Done(done) => return done,
         }
     }
 }
@@ -67,10 +67,10 @@ where
 {
     loop {
         match stage.next(input) {
-            Either::Left(yielded) => {
+            Step::Yield(yielded) => {
                 input = responder(yielded).await;
             }
-            Either::Right(done) => return done,
+            Step::Done(done) => return done,
         }
     }
 }
@@ -89,18 +89,18 @@ where
     Fut: Future<Output = A>,
 {
     match stage.first() {
-        Either::Left((yielded, mut next_stage)) => {
+        Step::Yield((yielded, mut next_stage)) => {
             let mut input = responder(yielded).await;
             loop {
                 match next_stage.next(input) {
-                    Either::Left(yielded) => {
+                    Step::Yield(yielded) => {
                         input = responder(yielded).await;
                     }
-                    Either::Right(done) => return done,
+                    Step::Done(done) => return done,
                 }
             }
         }
-        Either::Right(done) => done,
+        Step::Done(done) => done,
     }
 }
 
@@ -177,12 +177,12 @@ where
 {
     type Next = C;
 
-    fn first(self) -> Either<(C::Yield, C), C::Done> {
+    fn first(self) -> Step<(C::Yield, C), C::Done> {
         let Seed { mut stage, input } = self;
         let input = input.expect("seed input must exist");
         match stage.next(input) {
-            Either::Left(yielded) => Either::Left((yielded, stage)),
-            Either::Right(done) => Either::Right(done),
+            Step::Yield(yielded) => Step::Yield((yielded, stage)),
+            Step::Done(done) => Step::Done(done),
         }
     }
 }
@@ -190,7 +190,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{chain, first_once, once};
+    use crate::{chain, init_once, once};
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::future::{Future, ready};

@@ -1,5 +1,4 @@
-use crate::{Chain, FromFn, MapDone, MapInput, MapYield, Once, Repeat, Sans, chain, once, repeat};
-use either::Either;
+use crate::{Chain, FromFn, MapDone, MapInput, MapYield, Once, Repeat, Sans, Step, chain, once, repeat};
 
 /// Computations that yield an initial value before processing input.
 ///
@@ -10,7 +9,7 @@ use either::Either;
 /// use cont::*;
 ///
 /// let stage = init_once(42, |x: i32| x + 1);
-/// let (initial, mut cont) = stage.first().unwrap_left();
+/// let (initial, mut cont) = stage.first().unwrap_yield();
 /// assert_eq!(initial, 42);
 /// ```
 pub trait InitSans<A> {
@@ -18,12 +17,12 @@ pub trait InitSans<A> {
 
     /// Execute the first stage.
     ///
-    /// Returns `Left((yield_value, continuation))` for normal execution,
-    /// or `Right(done_value)` if the computation completes immediately.
+    /// Returns `Yield((yield_value, continuation))` for normal execution,
+    /// or `Done(done_value)` if the computation completes immediately.
     #[allow(clippy::type_complexity)]
     fn first(
         self,
-    ) -> Either<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done>;
+    ) -> Step<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done>;
 
     /// Chain with a continuation.
     fn chain<R>(self, r: R) -> (<Self::Next as Sans<A>>::Yield, Chain<Self::Next, R>)
@@ -33,8 +32,8 @@ pub trait InitSans<A> {
         R: Sans<A, Yield = <Self::Next as Sans<A>>::Yield>,
     {
         match self.first() {
-            Either::Left((y, next)) => (y, chain(next, r)),
-            Either::Right(_) => panic!("First stage completed immediately, cannot chain"),
+            Step::Yield((y, next)) => (y, chain(next, r)),
+            Step::Done(_) => panic!("First stage completed immediately, cannot chain"),
         }
     }
 
@@ -65,8 +64,8 @@ pub trait InitSans<A> {
         F: FnMut(A2) -> A,
     {
         match self.first() {
-            Either::Left((y, next)) => (y, MapInput { f, stage: next }),
-            Either::Right(_) => panic!("First stage completed immediately, cannot map input"),
+            Step::Yield((y, next)) => (y, MapInput { f, stage: next }),
+            Step::Done(_) => panic!("First stage completed immediately, cannot map input"),
         }
     }
 
@@ -77,11 +76,11 @@ pub trait InitSans<A> {
         F: FnMut(<Self::Next as Sans<A>>::Yield) -> Y2,
     {
         match self.first() {
-            Either::Left((y, next)) => {
+            Step::Yield((y, next)) => {
                 let mapped_y = f(y);
                 (mapped_y, MapYield { f, stage: next })
             }
-            Either::Right(_) => panic!("First stage completed immediately, cannot map yield"),
+            Step::Done(_) => panic!("First stage completed immediately, cannot map yield"),
         }
     }
 
@@ -92,8 +91,8 @@ pub trait InitSans<A> {
         F: FnMut(<Self::Next as Sans<A>>::Done) -> D2,
     {
         match self.first() {
-            Either::Left((y, next)) => (y, MapDone { f, stage: next }),
-            Either::Right(_) => panic!("First stage completed immediately, cannot map done"),
+            Step::Yield((y, next)) => (y, MapDone { f, stage: next }),
+            Step::Done(_) => panic!("First stage completed immediately, cannot map done"),
         }
     }
 }
@@ -103,29 +102,29 @@ where
     F: Sans<A, Yield = Y>,
 {
     type Next = F;
-    fn first(self) -> Either<(Y, F), F::Done> {
-        Either::Left(self)
+    fn first(self) -> Step<(Y, F), F::Done> {
+        Step::Yield(self)
     }
 }
 
-impl<A, L, R> InitSans<A> for Either<L, R>
+impl<A, L, R> InitSans<A> for either::Either<L, R>
 where
     L: InitSans<A>,
     R: InitSans<A>,
     R::Next: Sans<A, Done = <L::Next as Sans<A>>::Done, Yield = <L::Next as Sans<A>>::Yield>,
 {
-    type Next = Either<L::Next, R::Next>;
+    type Next = either::Either<L::Next, R::Next>;
     fn first(
         self,
-    ) -> Either<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done> {
+    ) -> Step<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done> {
         match self {
-            Either::Left(l) => match l.first() {
-                Either::Left((y, next_l)) => Either::Left((y, Either::Left(next_l))),
-                Either::Right(resume) => Either::Right(resume),
+            either::Either::Left(l) => match l.first() {
+                Step::Yield((y, next_l)) => Step::Yield((y, either::Either::Left(next_l))),
+                Step::Done(resume) => Step::Done(resume),
             },
-            Either::Right(r) => match r.first() {
-                Either::Left((y, next_r)) => Either::Left((y, Either::Right(next_r))),
-                Either::Right(resume) => Either::Right(resume),
+            either::Either::Right(r) => match r.first() {
+                Step::Yield((y, next_r)) => Step::Yield((y, either::Either::Right(next_r))),
+                Step::Done(resume) => Step::Done(resume),
             },
         }
     }
@@ -160,21 +159,20 @@ pub fn init_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
 ///
 /// ```rust
 /// use cont::*;
-/// use either::Either;
 ///
 /// let mut counter = 0;
 /// let (initial, mut stage) = init_from_fn(42, move |x: i32| {
 ///     counter += 1;
-///     if counter < 3 { Either::Left(x * counter) } else { Either::Right(x + counter) }
+///     if counter < 3 { Step::Yield(x * counter) } else { Step::Done(x + counter) }
 /// });
 /// assert_eq!(initial, 42);
-/// assert_eq!(stage.next(10).unwrap_left(), 10);
-/// assert_eq!(stage.next(10).unwrap_left(), 20);
-/// assert_eq!(stage.next(10).unwrap_right(), 13);
+/// assert_eq!(stage.next(10).unwrap_yield(), 10);
+/// assert_eq!(stage.next(10).unwrap_yield(), 20);
+/// assert_eq!(stage.next(10).unwrap_done(), 13);
 /// ```
 pub fn init_from_fn<A, Y, D, F>(initial: Y, f: F) -> (Y, FromFn<F>)
 where
-    F: FnMut(A) -> Either<Y, D>,
+    F: FnMut(A) -> Step<Y, D>,
 {
     (initial, FromFn(f))
 }
@@ -195,8 +193,8 @@ mod tests {
         type Yield = &'static str;
         type Done = &'static str;
 
-        fn next(&mut self, input: &'static str) -> Either<Self::Yield, Self::Done> {
-            Either::Right(input)
+        fn next(&mut self, input: &'static str) -> Step<Self::Yield, Self::Done> {
+            Step::Done(input)
         }
     }
 
@@ -205,11 +203,11 @@ mod tests {
 
         fn first(
             self,
-        ) -> Either<
+        ) -> Step<
             (<Self::Next as Sans<&'static str>>::Yield, Self::Next),
             <Self::Next as Sans<&'static str>>::Done,
         > {
-            Either::Right("left-done")
+            Step::Done("left-done")
         }
     }
 
@@ -222,9 +220,9 @@ mod tests {
             next
         });
 
-        let (_, mut next) = fib.first().unwrap_left();
+        let (_, mut next) = fib.first().unwrap_yield();
         for i in 1..11 {
-            let cur = next.next(1).unwrap_left();
+            let cur = next.next(1).unwrap_yield();
             assert_eq!(i + 1, cur);
         }
     }
@@ -238,9 +236,9 @@ mod tests {
         });
 
         assert_eq!(size_of_val(&divider), 32);
-        let (mut cur, mut next) = divider.first().unwrap_left();
+        let (mut cur, mut next) = divider.first().unwrap_yield();
         for i in 2..20 {
-            let next_cur = next.next(i).unwrap_left();
+            let next_cur = next.next(i).unwrap_yield();
             assert_eq!(cur / i, next_cur);
             cur = next_cur;
         }
@@ -258,10 +256,10 @@ mod tests {
 
         let (first_yield, mut stage) = initializer.chain(repeater);
         assert_eq!(10, first_yield);
-        assert_eq!(13, stage.next(8).unwrap_left());
-        assert_eq!(16, stage.next(8).unwrap_left());
-        assert_eq!(24, stage.next(8).unwrap_left());
-        assert_eq!(32, stage.next(8).unwrap_left());
+        assert_eq!(13, stage.next(8).unwrap_yield());
+        assert_eq!(16, stage.next(8).unwrap_yield());
+        assert_eq!(24, stage.next(8).unwrap_yield());
+        assert_eq!(32, stage.next(8).unwrap_yield());
     }
 
     #[test]
@@ -289,9 +287,9 @@ mod tests {
 
         let (initial_total, mut stage) = repeating;
         assert_eq!("total=0", initial_total);
-        assert_eq!("total=5", stage.next("add 5").unwrap_left());
-        assert_eq!("total=2", stage.next("sub 3").unwrap_left());
-        assert_eq!("total=7", stage.next("add 5").unwrap_left());
+        assert_eq!("total=5", stage.next("add 5").unwrap_yield());
+        assert_eq!("total=2", stage.next("sub 3").unwrap_yield());
+        assert_eq!("total=7", stage.next("add 5").unwrap_yield());
     }
 
     #[test]
@@ -304,28 +302,28 @@ mod tests {
             .map_done(|resume: u32| resume + 7);
         assert_eq!(42, first_value);
 
-        assert_eq!(11, stage.next(10).unwrap_left());
-        assert_eq!(30, stage.next(10).unwrap_left());
-        assert_eq!(17, stage.next(10).unwrap_right());
+        assert_eq!(11, stage.next(10).unwrap_yield());
+        assert_eq!(30, stage.next(10).unwrap_yield());
+        assert_eq!(17, stage.next(10).unwrap_done());
     }
 
     #[test]
     fn test_either_first_right_branch_selected() {
-        let stage: Either<(i32, Repeat<fn(i32) -> i32>), (i32, Repeat<fn(i32) -> i32>)> =
-            Either::Right(init_repeat(2_i32, add_three));
+        let stage: either::Either<(i32, Repeat<fn(i32) -> i32>), (i32, Repeat<fn(i32) -> i32>)> =
+            either::Either::Right(init_repeat(2_i32, add_three));
 
-        let (first_value, mut next_stage) = stage.first().unwrap_left();
+        let (first_value, mut next_stage) = stage.first().unwrap_yield();
         assert_eq!(2, first_value);
-        assert_eq!(5, next_stage.next(2).unwrap_left());
-        assert_eq!(6, next_stage.next(3).unwrap_left());
+        assert_eq!(5, next_stage.next(2).unwrap_yield());
+        assert_eq!(6, next_stage.next(3).unwrap_yield());
     }
 
     #[test]
     fn test_either_first_left_done_returns_resume() {
-        let stage: Either<ImmediateFirstDone, ImmediateFirstDone> =
-            Either::Left(ImmediateFirstDone);
+        let stage: either::Either<ImmediateFirstDone, ImmediateFirstDone> =
+            either::Either::Left(ImmediateFirstDone);
 
-        let resume = stage.first().unwrap_right();
+        let resume = stage.first().unwrap_done();
         assert_eq!("left-done", resume);
     }
 
@@ -340,8 +338,8 @@ mod tests {
             .map_yield(|value: u32| format!("value={value}"))
             .map_done(|resume: u32| format!("done={resume}"));
         assert_eq!("value=5", first_value);
-        assert_eq!("value=9", rest.next("7").unwrap_left());
-        assert_eq!("value=16", rest.next("8").unwrap_left());
-        assert_eq!("done=9", rest.next("9").unwrap_right());
+        assert_eq!("value=9", rest.next("7").unwrap_yield());
+        assert_eq!("value=16", rest.next("8").unwrap_yield());
+        assert_eq!("done=9", rest.next("9").unwrap_done());
     }
 }

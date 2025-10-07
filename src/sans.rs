@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use either::Either;
+use crate::step::Step;
 
 /// Core trait for stateful computations that process input and yield intermediate values.
 ///
@@ -16,8 +16,8 @@ use either::Either;
 /// use cont::*;
 ///
 /// let mut stage = once(|x: i32| x * 2);
-/// assert_eq!(stage.next(5).unwrap_left(), 10);
-/// assert_eq!(stage.next(3).unwrap_right(), 3); // Done
+/// assert_eq!(stage.next(5).unwrap_yield(), 10);
+/// assert_eq!(stage.next(3).unwrap_done(), 3); // Done
 /// ```
 pub trait Sans<A> {
     /// Type of intermediate values yielded during computation
@@ -25,8 +25,8 @@ pub trait Sans<A> {
     /// Type of final result when computation completes
     type Done;
 
-    /// Process input, returning `Left(yield)` to continue or `Right(done)` to complete.
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done>;
+    /// Process input, returning `Yield` to continue or `Done` to complete.
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done>;
 
     /// Chain with another continuation.
     fn chain<R>(self, r: R) -> Chain<Self, R>
@@ -100,10 +100,10 @@ where
 {
     type Yield = C::Yield;
     type Done = Result<C::Done, PoisonError>;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.lock().map_err(|_| PoisonError) {
-            Ok(mut f) => f.next(input).map_right(Ok),
-            Err(e) => Either::Right(Err(e)),
+            Ok(mut f) => f.next(input).map_done(Ok),
+            Err(e) => Step::Done(Err(e)),
         }
     }
 }
@@ -114,7 +114,7 @@ where
 {
     type Yield = C::Yield;
     type Done = C::Done;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         let mut v = self.as_ref().borrow_mut();
         v.next(input)
     }
@@ -124,26 +124,26 @@ pub struct FromFn<F>(pub F);
 
 impl<A, Y, D, F> Sans<A> for FromFn<F>
 where
-    F: FnMut(A) -> Either<Y, D>,
+    F: FnMut(A) -> Step<Y, D>,
 {
     type Yield = Y;
     type Done = D;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         (self.0)(input)
     }
 }
 
-impl<A, L, R> Sans<A> for Either<L, R>
+impl<A, L, R> Sans<A> for either::Either<L, R>
 where
     L: Sans<A>,
     R: Sans<A, Yield = L::Yield, Done = L::Done>,
 {
     type Yield = L::Yield;
     type Done = L::Done;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self {
-            Either::Left(l) => l.next(input),
-            Either::Right(r) => r.next(input),
+            either::Either::Left(l) => l.next(input),
+            either::Either::Right(r) => r.next(input),
         }
     }
 }
@@ -159,14 +159,14 @@ where
 {
     type Yield = Y;
     type Done = A;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
-        Either::Left(self.0(input))
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
+        Step::Yield(self.0(input))
     }
 }
 
 /// Applies a function once, then completes on subsequent calls.
 ///
-/// First call yields the function result, subsequent calls return `Right(input)`.
+/// First call yields the function result, subsequent calls return `Done(input)`.
 pub struct Once<F>(Option<F>);
 
 /// Create a continuation that applies a function once.
@@ -175,8 +175,8 @@ pub struct Once<F>(Option<F>);
 /// use cont::*;
 ///
 /// let mut stage = once(|x: i32| x + 10);
-/// assert_eq!(stage.next(5).unwrap_left(), 15);
-/// assert_eq!(stage.next(3).unwrap_right(), 3); // Done
+/// assert_eq!(stage.next(5).unwrap_yield(), 15);
+/// assert_eq!(stage.next(3).unwrap_done(), 3); // Done
 /// ```
 pub fn once<F>(f: F) -> Once<F> {
     Once(Some(f))
@@ -194,10 +194,10 @@ where
 {
     type Yield = Y;
     type Done = A;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.0.take() {
-            Some(f) => Either::Left(f(input)),
-            None => Either::Right(input),
+            Some(f) => Step::Yield(f(input)),
+            None => Step::Done(input),
         }
     }
 }
@@ -227,11 +227,11 @@ where
 {
     type Yield = L::Yield;
     type Done = R::Done;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.0 {
             Some(ref mut l) => match l.next(input) {
-                Either::Left(y) => Either::Left(y),
-                Either::Right(a) => {
+                Step::Yield(y) => Step::Yield(y),
+                Step::Done(a) => {
                     self.0 = None; // we drop the old stage when it's done
                     self.1.next(a)
                 }
@@ -256,7 +256,7 @@ where
 {
     type Yield = S::Yield;
     type Done = S::Done;
-    fn next(&mut self, input: A1) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A1) -> Step<Self::Yield, Self::Done> {
         let a2 = (self.f)(input);
         self.stage.next(a2)
     }
@@ -277,10 +277,10 @@ where
 {
     type Yield = Y2;
     type Done = S::Done;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.stage.next(input) {
-            Either::Left(y1) => Either::Left((self.f)(y1)),
-            Either::Right(a) => Either::Right(a),
+            Step::Yield(y1) => Step::Yield((self.f)(y1)),
+            Step::Done(a) => Step::Done(a),
         }
     }
 }
@@ -300,10 +300,10 @@ where
 {
     type Yield = Y;
     type Done = D2;
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done> {
+    fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.stage.next(input) {
-            Either::Left(y) => Either::Left(y),
-            Either::Right(r1) => Either::Right((self.f)(r1)),
+            Step::Yield(y) => Step::Yield(y),
+            Step::Done(r1) => Step::Done((self.f)(r1)),
         }
     }
 }
@@ -314,8 +314,8 @@ where
 /// use cont::*;
 ///
 /// let mut doubler = repeat(|x: i32| x * 2);
-/// assert_eq!(doubler.next(5).unwrap_left(), 10);
-/// assert_eq!(doubler.next(3).unwrap_left(), 6);
+/// assert_eq!(doubler.next(5).unwrap_yield(), 10);
+/// assert_eq!(doubler.next(3).unwrap_yield(), 6);
 /// // Continues forever...
 /// ```
 pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
@@ -326,13 +326,12 @@ pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
 ///
 /// ```rust
 /// use cont::*;
-/// use either::Either;
 ///
 /// let mut toggle = from_fn(|x: bool| {
-///     if x { Either::Left(!x) } else { Either::Right(x) }
+///     if x { Step::Yield(!x) } else { Step::Done(x) }
 /// });
-/// assert_eq!(toggle.next(true).unwrap_left(), false);
-/// assert_eq!(toggle.next(false).unwrap_right(), false);
+/// assert_eq!(toggle.next(true).unwrap_yield(), false);
+/// assert_eq!(toggle.next(false).unwrap_done(), false);
 /// ```
 pub fn from_fn<F>(f: F) -> FromFn<F> {
     FromFn(f)
@@ -346,18 +345,18 @@ mod tests {
     fn test_chain_switches_to_second_stage_after_first_done() {
         let mut stage = once(|val: u32| val + 1).chain(repeat(|val: u32| val * 2));
 
-        assert_eq!(stage.next(3).unwrap_left(), 4);
-        assert_eq!(stage.next(4).unwrap_left(), 8);
-        assert_eq!(stage.next(5).unwrap_left(), 10);
+        assert_eq!(stage.next(3).unwrap_yield(), 4);
+        assert_eq!(stage.next(4).unwrap_yield(), 8);
+        assert_eq!(stage.next(5).unwrap_yield(), 10);
     }
 
     #[test]
     fn test_chain_propagates_done_from_second_stage() {
         let mut stage = chain(once(|val: u32| val + 1), once(|val: u32| val * 2));
 
-        assert_eq!(stage.next(2).unwrap_left(), 3);
-        assert_eq!(stage.next(3).unwrap_left(), 6);
-        assert_eq!(stage.next(4).unwrap_right(), 4);
+        assert_eq!(stage.next(2).unwrap_yield(), 3);
+        assert_eq!(stage.next(3).unwrap_yield(), 6);
+        assert_eq!(stage.next(4).unwrap_done(), 4);
     }
 
     #[test]
@@ -365,8 +364,8 @@ mod tests {
         let mut stage = chain(once(|val: u32| val + 1), once(|val: u32| val * 2))
             .map_done(|done: u32| format!("resume={done}"));
 
-        assert_eq!(stage.next(5).unwrap_left(), 6);
-        assert_eq!(stage.next(6).unwrap_left(), 12);
-        assert_eq!(stage.next(7).unwrap_right(), "resume=7".to_string());
+        assert_eq!(stage.next(5).unwrap_yield(), 6);
+        assert_eq!(stage.next(6).unwrap_yield(), 12);
+        assert_eq!(stage.next(7).unwrap_done(), "resume=7".to_string());
     }
 }
