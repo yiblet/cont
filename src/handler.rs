@@ -3,20 +3,20 @@
 //! This module provides both synchronous and asynchronous execution functions,
 //! plus utilities for working with continuations that need initial input.
 
-use crate::cont::Cont;
-use crate::first::First;
+use crate::init::InitSans;
+use crate::sans::Sans;
 use either::Either;
 use std::future::Future;
 
-/// Drive a `First` stage to completion with synchronous responses.
+/// Drive an `InitSans` stage to completion with synchronous responses.
 ///
-/// Executes the initial `First` stage and continues driving the resulting
+/// Executes the initial `InitSans` stage and continues driving the resulting
 /// continuation until completion, calling the responder for each yield.
-pub fn handle_first_sync<S, A, R>(stage: S, mut responder: R) -> <S::Next as Cont<A>>::Done
+pub fn handle_init_sync<S, A, R>(stage: S, mut responder: R) -> <S::Next as Sans<A>>::Done
 where
-    S: First<A>,
-    S::Next: Cont<A>,
-    R: FnMut(<S::Next as Cont<A>>::Yield) -> A,
+    S: InitSans<A>,
+    S::Next: Sans<A>,
+    R: FnMut(<S::Next as Sans<A>>::Yield) -> A,
 {
     match stage.first() {
         Either::Left((yielded, mut next_stage)) => {
@@ -39,7 +39,7 @@ where
 /// Takes an existing continuation with initial input and drives it to completion.
 pub fn handle_cont_sync<C, A, R>(mut stage: C, mut input: A, mut responder: R) -> C::Done
 where
-    C: Cont<A>,
+    C: Sans<A>,
     R: FnMut(C::Yield) -> A,
 {
     loop {
@@ -61,7 +61,7 @@ pub async fn handle_cont_async<C, A, R, Fut>(
     mut responder: R,
 ) -> C::Done
 where
-    C: Cont<A>,
+    C: Sans<A>,
     R: FnMut(C::Yield) -> Fut,
     Fut: Future<Output = A>,
 {
@@ -75,17 +75,17 @@ where
     }
 }
 
-/// Async version of `handle_first_sync`.
+/// Async version of `handle_init_sync`.
 ///
 /// The responder function returns a future that produces the next input.
-pub async fn handle_first_async<S, A, R, Fut>(
+pub async fn handle_init_async<S, A, R, Fut>(
     stage: S,
     mut responder: R,
-) -> <S::Next as Cont<A>>::Done
+) -> <S::Next as Sans<A>>::Done
 where
-    S: First<A>,
-    S::Next: Cont<A>,
-    R: FnMut(<S::Next as Cont<A>>::Yield) -> Fut,
+    S: InitSans<A>,
+    S::Next: Sans<A>,
+    R: FnMut(<S::Next as Sans<A>>::Yield) -> Fut,
     Fut: Future<Output = A>,
 {
     match stage.first() {
@@ -106,39 +106,39 @@ where
 
 /// Main function for executing continuation pipelines.
 ///
-/// This is the most commonly used function - a shorthand for `handle_first_sync`.
+/// This is the most commonly used function - a shorthand for `handle_init_sync`.
 ///
 /// ```rust
 /// use cont::*;
 ///
-/// let pipeline = first_once(10, |x: i32| x * 2).chain(once(|x: i32| x + 1));
+/// let pipeline = init_once(10, |x: i32| x * 2).chain(once(|x: i32| x + 1));
 /// let result = handle(pipeline, |yielded| yielded + 5);
 /// ```
-pub fn handle<S, A, R>(stage: S, responder: R) -> <S::Next as Cont<A>>::Done
+pub fn handle<S, A, R>(stage: S, responder: R) -> <S::Next as Sans<A>>::Done
 where
-    S: First<A>,
-    S::Next: Cont<A>,
-    R: FnMut(<S::Next as Cont<A>>::Yield) -> A,
+    S: InitSans<A>,
+    S::Next: Sans<A>,
+    R: FnMut(<S::Next as Sans<A>>::Yield) -> A,
 {
-    handle_first_sync(stage, responder)
+    handle_init_sync(stage, responder)
 }
 
 /// Async version of `handle`.
 ///
 /// Works with responder functions that return futures.
-pub async fn handle_async<S, A, R, Fut>(stage: S, responder: R) -> <S::Next as Cont<A>>::Done
+pub async fn handle_async<S, A, R, Fut>(stage: S, responder: R) -> <S::Next as Sans<A>>::Done
 where
-    S: First<A>,
-    S::Next: Cont<A>,
-    R: FnMut(<S::Next as Cont<A>>::Yield) -> Fut,
+    S: InitSans<A>,
+    S::Next: Sans<A>,
+    R: FnMut(<S::Next as Sans<A>>::Yield) -> Fut,
     Fut: Future<Output = A>,
 {
-    handle_first_async(stage, responder).await
+    handle_init_async(stage, responder).await
 }
 
 /// Bundles a continuation with initial input to make it usable with `handle()`.
 ///
-/// Converts any `Cont` into a `First` stage by providing the initial input upfront.
+/// Converts any `Sans` into an `InitSans` stage by providing the initial input upfront.
 /// This allows using regular continuations with the `handle()` function family.
 pub struct Seed<C, A> {
     stage: C,
@@ -166,14 +166,14 @@ impl<C, A> Seed<C, A> {
 /// ```
 pub fn with_input<A, C>(input: A, stage: C) -> Seed<C, A>
 where
-    C: Cont<A>,
+    C: Sans<A>,
 {
     Seed::new(stage, input)
 }
 
-impl<A, C> First<A> for Seed<C, A>
+impl<A, C> InitSans<A> for Seed<C, A>
 where
-    C: Cont<A>,
+    C: Sans<A>,
 {
     type Next = C;
 
@@ -262,15 +262,15 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_first_sync() {
-        let initializer = first_once(10_u32, |input: u32| input + 2);
+    fn test_handle_init_sync() {
+        let initializer = init_once(10_u32, |input: u32| input + 2);
         let finisher = once(|value: u32| value * 3);
         let stage = initializer.chain(finisher);
 
         let yields = Rc::new(RefCell::new(Vec::new()));
         let responses = Rc::new(RefCell::new(VecDeque::from(vec![5_u32, 6, 7])));
 
-        let done = handle_first_sync(stage, {
+        let done = handle_init_sync(stage, {
             let yields = Rc::clone(&yields);
             let responses = Rc::clone(&responses);
             move |value| {
@@ -287,15 +287,15 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_first_async() {
-        let initializer = first_once(10_u32, |input: u32| input + 2);
+    fn test_handle_init_async() {
+        let initializer = init_once(10_u32, |input: u32| input + 2);
         let finisher = once(|value: u32| value * 3);
         let stage = initializer.chain(finisher);
 
         let yields = Rc::new(RefCell::new(Vec::new()));
         let responses = Rc::new(RefCell::new(VecDeque::from(vec![5_u32, 6, 7])));
 
-        let done = block_on(handle_first_async(stage, {
+        let done = block_on(handle_init_async(stage, {
             let yields = Rc::clone(&yields);
             let responses = Rc::clone(&responses);
             move |value| {
@@ -313,8 +313,8 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_shortcut_for_first() {
-        let initializer = first_once(2_u32, |input: u32| input + 1);
+    fn test_handle_shortcut_for_init() {
+        let initializer = init_once(2_u32, |input: u32| input + 1);
         let finisher = once(|value: u32| value * 2);
         let done = handle(initializer.chain(finisher), |value: u32| value + 1);
         assert_eq!(done, 11);

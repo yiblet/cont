@@ -1,20 +1,20 @@
-use crate::{Chain, Cont, FromFn, MapDone, MapInput, MapYield, Once, Repeat, chain, once, repeat};
+use crate::{Chain, FromFn, MapDone, MapInput, MapYield, Once, Repeat, Sans, chain, once, repeat};
 use either::Either;
 
 /// Computations that yield an initial value before processing input.
 ///
-/// Unlike `Cont`, `First` stages can produce output immediately, making them ideal
+/// Unlike `Sans`, `InitSans` stages can produce output immediately, making them ideal
 /// for pipeline initialization or generators with seed values.
 ///
 /// ```rust
 /// use cont::*;
 ///
-/// let stage = first_once(42, |x: i32| x + 1);
+/// let stage = init_once(42, |x: i32| x + 1);
 /// let (initial, mut cont) = stage.first().unwrap_left();
 /// assert_eq!(initial, 42);
 /// ```
-pub trait First<A> {
-    type Next: Cont<A>;
+pub trait InitSans<A> {
+    type Next: Sans<A>;
 
     /// Execute the first stage.
     ///
@@ -23,14 +23,14 @@ pub trait First<A> {
     #[allow(clippy::type_complexity)]
     fn first(
         self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done>;
+    ) -> Either<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done>;
 
     /// Chain with a continuation.
-    fn chain<R>(self, r: R) -> (<Self::Next as Cont<A>>::Yield, Chain<Self::Next, R>)
+    fn chain<R>(self, r: R) -> (<Self::Next as Sans<A>>::Yield, Chain<Self::Next, R>)
     where
         Self: Sized,
-        Self::Next: Cont<A, Done = A>,
-        R: Cont<A, Yield = <Self::Next as Cont<A>>::Yield>,
+        Self::Next: Sans<A, Done = A>,
+        R: Sans<A, Yield = <Self::Next as Sans<A>>::Yield>,
     {
         match self.first() {
             Either::Left((y, next)) => (y, chain(next, r)),
@@ -39,27 +39,27 @@ pub trait First<A> {
     }
 
     /// Chain with a function that executes once.
-    fn chain_once<F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, Chain<Self::Next, Once<F>>)
+    fn chain_once<F>(self, f: F) -> (<Self::Next as Sans<A>>::Yield, Chain<Self::Next, Once<F>>)
     where
         Self: Sized,
-        Self::Next: Cont<A, Done = A>,
-        F: FnOnce(<Self::Next as Cont<A>>::Done) -> <Self::Next as Cont<A>>::Yield,
+        Self::Next: Sans<A, Done = A>,
+        F: FnOnce(<Self::Next as Sans<A>>::Done) -> <Self::Next as Sans<A>>::Yield,
     {
         self.chain(once(f))
     }
 
     /// Chain with a function that repeats indefinitely.
-    fn chain_repeat<F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, Chain<Self::Next, Repeat<F>>)
+    fn chain_repeat<F>(self, f: F) -> (<Self::Next as Sans<A>>::Yield, Chain<Self::Next, Repeat<F>>)
     where
         Self: Sized,
-        Self::Next: Cont<A, Done = A>,
-        F: FnMut(<Self::Next as Cont<A>>::Done) -> <Self::Next as Cont<A>>::Yield,
+        Self::Next: Sans<A, Done = A>,
+        F: FnMut(<Self::Next as Sans<A>>::Done) -> <Self::Next as Sans<A>>::Yield,
     {
         self.chain(repeat(f))
     }
 
     /// Transform inputs before they reach the underlying continuation.
-    fn map_input<A2, F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, MapInput<Self::Next, F>)
+    fn map_input<A2, F>(self, f: F) -> (<Self::Next as Sans<A>>::Yield, MapInput<Self::Next, F>)
     where
         Self: Sized,
         F: FnMut(A2) -> A,
@@ -74,7 +74,7 @@ pub trait First<A> {
     fn map_yield<Y2, F>(self, mut f: F) -> (Y2, MapYield<Self::Next, F>)
     where
         Self: Sized,
-        F: FnMut(<Self::Next as Cont<A>>::Yield) -> Y2,
+        F: FnMut(<Self::Next as Sans<A>>::Yield) -> Y2,
     {
         match self.first() {
             Either::Left((y, next)) => {
@@ -86,10 +86,10 @@ pub trait First<A> {
     }
 
     /// Transform the final result when completing.
-    fn map_done<D2, F>(self, f: F) -> (<Self::Next as Cont<A>>::Yield, MapDone<Self::Next, F>)
+    fn map_done<D2, F>(self, f: F) -> (<Self::Next as Sans<A>>::Yield, MapDone<Self::Next, F>)
     where
         Self: Sized,
-        F: FnMut(<Self::Next as Cont<A>>::Done) -> D2,
+        F: FnMut(<Self::Next as Sans<A>>::Done) -> D2,
     {
         match self.first() {
             Either::Left((y, next)) => (y, MapDone { f, stage: next }),
@@ -98,9 +98,9 @@ pub trait First<A> {
     }
 }
 
-impl<A, Y, F> First<A> for (Y, F)
+impl<A, Y, F> InitSans<A> for (Y, F)
 where
-    F: Cont<A, Yield = Y>,
+    F: Sans<A, Yield = Y>,
 {
     type Next = F;
     fn first(self) -> Either<(Y, F), F::Done> {
@@ -108,16 +108,16 @@ where
     }
 }
 
-impl<A, L, R> First<A> for Either<L, R>
+impl<A, L, R> InitSans<A> for Either<L, R>
 where
-    L: First<A>,
-    R: First<A>,
-    R::Next: Cont<A, Done = <L::Next as Cont<A>>::Done, Yield = <L::Next as Cont<A>>::Yield>,
+    L: InitSans<A>,
+    R: InitSans<A>,
+    R::Next: Sans<A, Done = <L::Next as Sans<A>>::Done, Yield = <L::Next as Sans<A>>::Yield>,
 {
     type Next = Either<L::Next, R::Next>;
     fn first(
         self,
-    ) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done> {
+    ) -> Either<(<Self::Next as Sans<A>>::Yield, Self::Next), <Self::Next as Sans<A>>::Done> {
         match self {
             Either::Left(l) => match l.first() {
                 Either::Left((y, next_l)) => Either::Left((y, Either::Left(next_l))),
@@ -131,13 +131,13 @@ where
     }
 }
 
-/// Chain a `First` stage with a continuation.
+/// Chain an `InitSans` stage with a continuation.
 ///
 /// Allows connecting stages that have initial yields with regular continuations.
-pub fn first_chain<A, Y, L, R>(first: (Y, L), r: R) -> (Y, Chain<L, R>)
+pub fn init_chain<A, Y, L, R>(first: (Y, L), r: R) -> (Y, Chain<L, R>)
 where
-    L: Cont<A, Done = A, Yield = Y>,
-    R: Cont<A, Yield = Y>,
+    L: Sans<A, Done = A, Yield = Y>,
+    R: Sans<A, Yield = Y>,
 {
     (first.0, chain(first.1, r))
 }
@@ -145,14 +145,14 @@ where
 /// Yield an initial value, then apply a function once.
 ///
 /// Combines immediate output with single function application.
-pub fn first_once<A, Y, F: FnOnce(A) -> Y>(y: Y, f: F) -> (Y, Once<F>) {
+pub fn init_once<A, Y, F: FnOnce(A) -> Y>(y: Y, f: F) -> (Y, Once<F>) {
     (y, once(f))
 }
 
 /// Yield an initial value, then apply a function indefinitely.
 ///
 /// Useful for generators that need to emit a seed value before starting their loop.
-pub fn first_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
+pub fn init_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
     (y, repeat(f))
 }
 
@@ -163,7 +163,7 @@ pub fn first_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
 /// use either::Either;
 ///
 /// let mut counter = 0;
-/// let (initial, mut stage) = first_from_fn(42, move |x: i32| {
+/// let (initial, mut stage) = init_from_fn(42, move |x: i32| {
 ///     counter += 1;
 ///     if counter < 3 { Either::Left(x * counter) } else { Either::Right(x + counter) }
 /// });
@@ -172,9 +172,9 @@ pub fn first_repeat<A, Y, F: FnMut(A) -> Y>(y: Y, f: F) -> (Y, Repeat<F>) {
 /// assert_eq!(stage.next(10).unwrap_left(), 20);
 /// assert_eq!(stage.next(10).unwrap_right(), 13);
 /// ```
-pub fn first_from_fn<A, Y, D, F>(initial: Y, f: F) -> (Y, FromFn<F>)
+pub fn init_from_fn<A, Y, D, F>(initial: Y, f: F) -> (Y, FromFn<F>)
 where
-    F: FnMut(A) -> Either<Y, D>
+    F: FnMut(A) -> Either<Y, D>,
 {
     (initial, FromFn(f))
 }
@@ -191,7 +191,7 @@ mod tests {
     #[derive(Clone, Copy, Debug)]
     struct ImmediateFirstDone;
 
-    impl Cont<&'static str> for ImmediateFirstDone {
+    impl Sans<&'static str> for ImmediateFirstDone {
         type Yield = &'static str;
         type Done = &'static str;
 
@@ -200,14 +200,14 @@ mod tests {
         }
     }
 
-    impl First<&'static str> for ImmediateFirstDone {
+    impl InitSans<&'static str> for ImmediateFirstDone {
         type Next = Self;
 
         fn first(
             self,
         ) -> Either<
-            (<Self::Next as Cont<&'static str>>::Yield, Self::Next),
-            <Self::Next as Cont<&'static str>>::Done,
+            (<Self::Next as Sans<&'static str>>::Yield, Self::Next),
+            <Self::Next as Sans<&'static str>>::Done,
         > {
             Either::Right("left-done")
         }
@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn test_simple_addition() {
         let mut prev = 1;
-        let fib = first_repeat(1, move |n: u128| {
+        let fib = init_repeat(1, move |n: u128| {
             let next = prev + n;
             prev = next;
             next
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn test_simple_divider() {
         let mut start = 101323012313805546028676730784521326u128;
-        let divider = first_repeat(start, |divisor: u128| {
+        let divider = init_repeat(start, |divisor: u128| {
             start /= divisor;
             start
         });
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_chain_once_into_repeat() {
-        let initializer = first_once(10_u32, |input: u32| input + 5);
+        let initializer = init_once(10_u32, |input: u32| input + 5);
         let mut multiplier = 2_u32;
         let repeater = repeat(move |input: u32| {
             let output = input * multiplier;
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn test_map_input_and_map_yield_pipeline() {
         let mut total = 0_i64;
-        let repeating = first_repeat(0_i64, move |delta: i64| {
+        let repeating = init_repeat(0_i64, move |delta: i64| {
             total += delta;
             total
         })
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_chain_and_map_done_resume_flow() {
-        let initializer = first_once(42_u32, |input: u32| input + 1);
+        let initializer = init_once(42_u32, |input: u32| input + 1);
         let finisher = once(|input: u32| input * 3);
 
         let (first_value, mut stage) = initializer
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn test_either_first_right_branch_selected() {
         let stage: Either<(i32, Repeat<fn(i32) -> i32>), (i32, Repeat<fn(i32) -> i32>)> =
-            Either::Right(first_repeat(2_i32, add_three));
+            Either::Right(init_repeat(2_i32, add_three));
 
         let (first_value, mut next_stage) = stage.first().unwrap_left();
         assert_eq!(2, first_value);
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_first_ext_map_input_yield_done() {
-        let initializer = first_once(5_u32, |input: u32| input + 2);
+        let initializer = init_once(5_u32, |input: u32| input + 2);
         let finisher = once(|value: u32| value * 2);
 
         let (first_value, mut rest) = initializer

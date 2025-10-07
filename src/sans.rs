@@ -19,7 +19,7 @@ use either::Either;
 /// assert_eq!(stage.next(5).unwrap_left(), 10);
 /// assert_eq!(stage.next(3).unwrap_right(), 3); // Done
 /// ```
-pub trait Cont<A> {
+pub trait Sans<A> {
     /// Type of intermediate values yielded during computation
     type Yield;
     /// Type of final result when computation completes
@@ -31,8 +31,8 @@ pub trait Cont<A> {
     /// Chain with another continuation.
     fn chain<R>(self, r: R) -> Chain<Self, R>
     where
-        Self: Sized + Cont<A, Done = A>,
-        R: Cont<A, Yield = Self::Yield>,
+        Self: Sized + Sans<A, Done = A>,
+        R: Sans<A, Yield = Self::Yield>,
     {
         chain(self, r)
     }
@@ -40,7 +40,7 @@ pub trait Cont<A> {
     /// Chain with a function that executes once.
     fn chain_once<F>(self, f: F) -> Chain<Self, Once<F>>
     where
-        Self: Sized + Cont<A, Done = A>,
+        Self: Sized + Sans<A, Done = A>,
         F: FnOnce(Self::Done) -> Self::Yield,
     {
         chain(self, Once::new(f))
@@ -49,7 +49,7 @@ pub trait Cont<A> {
     /// Chain with a function that repeats indefinitely.
     fn chain_repeat<F>(self, f: F) -> Chain<Self, Repeat<F>>
     where
-        Self: Sized + Cont<A, Done = A>,
+        Self: Sized + Sans<A, Done = A>,
         F: FnMut(Self::Done) -> Self::Yield,
     {
         chain(self, repeat(f))
@@ -94,9 +94,9 @@ impl fmt::Display for PoisonError {
 
 impl std::error::Error for PoisonError {}
 
-impl<A, C> Cont<A> for Arc<Mutex<C>>
+impl<A, C> Sans<A> for Arc<Mutex<C>>
 where
-    C: Cont<A>,
+    C: Sans<A>,
 {
     type Yield = C::Yield;
     type Done = Result<C::Done, PoisonError>;
@@ -108,9 +108,9 @@ where
     }
 }
 
-impl<A, C> Cont<A> for Rc<RefCell<C>>
+impl<A, C> Sans<A> for Rc<RefCell<C>>
 where
-    C: Cont<A>,
+    C: Sans<A>,
 {
     type Yield = C::Yield;
     type Done = C::Done;
@@ -122,7 +122,7 @@ where
 
 pub struct FromFn<F>(pub F);
 
-impl<A, Y, D, F> Cont<A> for FromFn<F>
+impl<A, Y, D, F> Sans<A> for FromFn<F>
 where
     F: FnMut(A) -> Either<Y, D>,
 {
@@ -133,10 +133,10 @@ where
     }
 }
 
-impl<A, L, R> Cont<A> for Either<L, R>
+impl<A, L, R> Sans<A> for Either<L, R>
 where
-    L: Cont<A>,
-    R: Cont<A, Yield = L::Yield, Done = L::Done>,
+    L: Sans<A>,
+    R: Sans<A, Yield = L::Yield, Done = L::Done>,
 {
     type Yield = L::Yield;
     type Done = L::Done;
@@ -153,7 +153,7 @@ where
 /// Never completes on its own - will continue processing until externally stopped.
 pub struct Repeat<F>(F);
 
-impl<A, Y, F> Cont<A> for Repeat<F>
+impl<A, Y, F> Sans<A> for Repeat<F>
 where
     F: FnMut(A) -> Y,
 {
@@ -188,7 +188,7 @@ impl<F> Once<F> {
     }
 }
 
-impl<A, Y, F> Cont<A> for Once<F>
+impl<A, Y, F> Sans<A> for Once<F>
 where
     F: FnOnce(A) -> Y,
 {
@@ -208,8 +208,8 @@ where
 /// Both stages must yield the same type.
 pub fn chain<A, L, R>(l: L, r: R) -> Chain<L, R>
 where
-    L: Cont<A, Done = A>,
-    R: Cont<A, Yield = L::Yield>,
+    L: Sans<A, Done = A>,
+    R: Sans<A, Yield = L::Yield>,
 {
     Chain(Some(l), r)
 }
@@ -220,10 +220,10 @@ where
 /// once it completes to free resources.
 pub struct Chain<S1, S2>(Option<S1>, S2);
 
-impl<A, L, R> Cont<A> for Chain<L, R>
+impl<A, L, R> Sans<A> for Chain<L, R>
 where
-    L: Cont<A, Done = A>,
-    R: Cont<A, Yield = L::Yield>,
+    L: Sans<A, Done = A>,
+    R: Sans<A, Yield = L::Yield>,
 {
     type Yield = L::Yield;
     type Done = R::Done;
@@ -249,9 +249,9 @@ pub struct MapInput<S, F> {
     pub stage: S,
 }
 
-impl<A1, A2, S, F> Cont<A1> for MapInput<S, F>
+impl<A1, A2, S, F> Sans<A1> for MapInput<S, F>
 where
-    S: Cont<A2>,
+    S: Sans<A2>,
     F: FnMut(A1) -> A2,
 {
     type Yield = S::Yield;
@@ -270,9 +270,9 @@ pub struct MapYield<S, F> {
     pub stage: S,
 }
 
-impl<A, Y1, Y2, S, F> Cont<A> for MapYield<S, F>
+impl<A, Y1, Y2, S, F> Sans<A> for MapYield<S, F>
 where
-    S: Cont<A, Yield = Y1>,
+    S: Sans<A, Yield = Y1>,
     F: FnMut(Y1) -> Y2,
 {
     type Yield = Y2;
@@ -293,9 +293,9 @@ pub struct MapDone<S, F> {
     pub stage: S,
 }
 
-impl<A, Y, D1, D2, S, F> Cont<A> for MapDone<S, F>
+impl<A, Y, D1, D2, S, F> Sans<A> for MapDone<S, F>
 where
-    S: Cont<A, Yield = Y, Done = D1>,
+    S: Sans<A, Yield = Y, Done = D1>,
     F: FnMut(D1) -> D2,
 {
     type Yield = Y;

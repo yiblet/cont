@@ -5,8 +5,8 @@
 //!
 //! ## Core Traits
 //!
-//! - **[`Cont<A>`]**: Stateful computations that process input and yield values
-//! - **[`First<A>`]**: Computations that provide initial output before processing input
+//! - **[`Sans<A>`]**: Stateful computations that process input and yield values
+//! - **[`InitSans<A>`]**: Computations that provide initial output before processing input
 //!
 //! ## Key Features
 //!
@@ -20,7 +20,7 @@
 //! use cont::*;
 //!
 //! // Build a pipeline that yields initial value, processes input, then finishes
-//! let pipeline = first_once(10, |x: i32| x * 2)  // Yields 10, then multiplies input by 2
+//! let pipeline = init_once(10, |x: i32| x * 2)  // Yields 10, then multiplies input by 2
 //!     .chain(once(|x: i32| x + 1));              // Adds 1 to input, then completes
 //!
 //! // Drive the pipeline with responses to each yield
@@ -32,7 +32,7 @@
 //! **Building Stages:**
 //! - [`once(f)`] - Apply function once, then complete
 //! - [`repeat(f)`] - Apply function repeatedly
-//! - [`first_once(value, f)`] - Yield initial value, then apply function once
+//! - [`init_once(value, f)`] - Yield initial value, then apply function once
 //! - [`chain(a, b)`] - Run stage `a` to completion, then run stage `b`
 //!
 //! **Execution:**
@@ -43,10 +43,10 @@
 //! - [`with_input(input, cont)`] - Bundle continuation with initial input
 //!
 
-mod cont;
-mod first;
 mod handler;
+mod init;
+mod sans;
 
-pub use cont::*;
-pub use first::*;
 pub use handler::*;
+pub use init::*;
+pub use sans::*;
