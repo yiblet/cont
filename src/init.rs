@@ -12,7 +12,7 @@ use crate::{
 /// use cont::*;
 ///
 /// let stage = init_once(42, |x: i32| x + 1);
-/// let (initial, mut cont) = stage.first().unwrap_yielded();
+/// let (initial, mut cont) = stage.init().unwrap_yielded();
 /// assert_eq!(initial, 42);
 /// ```
 pub trait InitSans<I, O> {
@@ -23,34 +23,28 @@ pub trait InitSans<I, O> {
     /// Returns `Yield((yield_value, continuation))` for normal execution,
     /// or `Done(done_value)` if the computation completes immediately.
     #[allow(clippy::type_complexity)]
-    fn first(
-        self,
-    ) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Done>;
+    fn init(self) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Done>;
 
     /// Chain with a continuation.
-    fn chain<R>(
-        self,
-        r: R,
-    ) -> Step<(O, Chain<Self::Next, R>), <Self::Next as Sans<I, O>>::Done>
+    #[allow(clippy::type_complexity)]
+    fn chain<R>(self, r: R) -> Step<(O, Chain<Self::Next, R>), <Self::Next as Sans<I, O>>::Done>
     where
         Self: Sized,
         Self::Next: Sans<I, O, Done = I>,
         R: Sans<I, O>,
     {
-        match self.first() {
+        match self.init() {
             Step::Yielded((o, next)) => Step::Yielded((o, chain(next, r))),
             Step::Complete(d) => Step::Complete(d),
         }
     }
 
     /// Chain with a function that executes once.
+    #[allow(clippy::type_complexity)]
     fn chain_once<F>(
         self,
         f: F,
-    ) -> Step<
-        (O, Chain<Self::Next, Once<F>>),
-        <Self::Next as Sans<I, O>>::Done,
-    >
+    ) -> Step<(O, Chain<Self::Next, Once<F>>), <Self::Next as Sans<I, O>>::Done>
     where
         Self: Sized,
         Self::Next: Sans<I, O, Done = I>,
@@ -60,13 +54,11 @@ pub trait InitSans<I, O> {
     }
 
     /// Chain with a function that repeats indefinitely.
+    #[allow(clippy::type_complexity)]
     fn chain_repeat<F>(
         self,
         f: F,
-    ) -> Step<
-        (O, Chain<Self::Next, Repeat<F>>),
-        <Self::Next as Sans<I, O>>::Done,
-    >
+    ) -> Step<(O, Chain<Self::Next, Repeat<F>>), <Self::Next as Sans<I, O>>::Done>
     where
         Self: Sized,
         Self::Next: Sans<I, O, Done = I>,
@@ -76,24 +68,23 @@ pub trait InitSans<I, O> {
     }
 
     /// Transform inputs before they reach the underlying continuation.
+    #[allow(clippy::type_complexity)]
     fn map_input<I2, F>(
         self,
         f: F,
-    ) -> Step<
-        (O, MapInput<Self::Next, F>),
-        <Self::Next as Sans<I, O>>::Done,
-    >
+    ) -> Step<(O, MapInput<Self::Next, F>), <Self::Next as Sans<I, O>>::Done>
     where
         Self: Sized,
         F: FnMut(I2) -> I,
     {
-        match self.first() {
+        match self.init() {
             Step::Yielded((o, next)) => Step::Yielded((o, map_input(f, next))),
             Step::Complete(d) => Step::Complete(d),
         }
     }
 
     /// Transform yielded values before returning them.
+    #[allow(clippy::type_complexity)]
     fn map_yield<O2, F>(
         self,
         mut f: F,
@@ -102,7 +93,7 @@ pub trait InitSans<I, O> {
         Self: Sized,
         F: FnMut(O) -> O2,
     {
-        match self.first() {
+        match self.init() {
             Step::Yielded((o, next)) => {
                 let mapped_o = f(o);
                 Step::Yielded((mapped_o, map_yield(f, next)))
@@ -112,15 +103,12 @@ pub trait InitSans<I, O> {
     }
 
     /// Transform the final result when completing.
-    fn map_done<D2, F>(
-        self,
-        mut f: F,
-    ) -> Step<(O, MapDone<Self::Next, F>), D2>
+    fn map_done<D2, F>(self, mut f: F) -> Step<(O, MapDone<Self::Next, F>), D2>
     where
         Self: Sized,
         F: FnMut(<Self::Next as Sans<I, O>>::Done) -> D2,
     {
-        match self.first() {
+        match self.init() {
             Step::Yielded((o, next)) => Step::Yielded((o, map_done(f, next))),
             Step::Complete(d) => Step::Complete(f(d)),
         }
@@ -132,7 +120,7 @@ where
     S: Sans<I, O>,
 {
     type Next = S;
-    fn first(self) -> Step<(O, S), S::Done> {
+    fn init(self) -> Step<(O, S), S::Done> {
         Step::Yielded(self)
     }
 }
@@ -142,7 +130,7 @@ where
     S: Sans<I, O>,
 {
     type Next = S;
-    fn first(self) -> Step<(O, S), S::Done> {
+    fn init(self) -> Step<(O, S), S::Done> {
         self
     }
 }
@@ -154,15 +142,13 @@ where
     R::Next: Sans<I, O, Done = <L::Next as Sans<I, O>>::Done>,
 {
     type Next = either::Either<L::Next, R::Next>;
-    fn first(
-        self,
-    ) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Done> {
+    fn init(self) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Done> {
         match self {
-            either::Either::Left(l) => match l.first() {
+            either::Either::Left(l) => match l.init() {
                 Step::Yielded((o, next_l)) => Step::Yielded((o, either::Either::Left(next_l))),
                 Step::Complete(resume) => Step::Complete(resume),
             },
-            either::Either::Right(r) => match r.first() {
+            either::Either::Right(r) => match r.init() {
                 Step::Yielded((o, next_r)) => Step::Yielded((o, either::Either::Right(next_r))),
                 Step::Complete(resume) => Step::Complete(resume),
             },
@@ -240,12 +226,10 @@ mod tests {
     impl InitSans<&'static str, &'static str> for ImmediateFirstDone {
         type Next = Self;
 
-        fn first(
+        fn init(
             self,
-        ) -> Step<
-            (&'static str, Self::Next),
-            <Self::Next as Sans<&'static str, &'static str>>::Done,
-        > {
+        ) -> Step<(&'static str, Self::Next), <Self::Next as Sans<&'static str, &'static str>>::Done>
+        {
             Step::Complete("left-done")
         }
     }
@@ -259,7 +243,7 @@ mod tests {
             next
         });
 
-        let (_, mut next) = fib.first().unwrap_yielded();
+        let (_, mut next) = fib.init().unwrap_yielded();
         for i in 1..11 {
             let cur = next.next(1).unwrap_yielded();
             assert_eq!(i + 1, cur);
@@ -275,7 +259,7 @@ mod tests {
         });
 
         assert_eq!(size_of_val(&divider), 32);
-        let (mut cur, mut next) = divider.first().unwrap_yielded();
+        let (mut cur, mut next) = divider.init().unwrap_yielded();
         for i in 2..20 {
             let next_cur = next.next(i).unwrap_yielded();
             assert_eq!(cur / i, next_cur);
@@ -293,7 +277,7 @@ mod tests {
             output
         });
 
-        let (first_yield, mut stage) = initializer.chain(repeater).first().unwrap_yielded();
+        let (first_yield, mut stage) = initializer.chain(repeater).init().unwrap_yielded();
         assert_eq!(10, first_yield);
         assert_eq!(13, stage.next(8).unwrap_yielded());
         assert_eq!(16, stage.next(8).unwrap_yielded());
@@ -354,7 +338,7 @@ mod tests {
         let stage: either::Either<(i32, Repeat<fn(i32) -> i32>), (i32, Repeat<fn(i32) -> i32>)> =
             either::Either::Right(init_repeat(2_i32, add_three));
 
-        let (first_value, mut next_stage) = stage.first().unwrap_yielded();
+        let (first_value, mut next_stage) = stage.init().unwrap_yielded();
         assert_eq!(2, first_value);
         assert_eq!(5, next_stage.next(2).unwrap_yielded());
         assert_eq!(6, next_stage.next(3).unwrap_yielded());
@@ -365,7 +349,7 @@ mod tests {
         let stage: either::Either<ImmediateFirstDone, ImmediateFirstDone> =
             either::Either::Left(ImmediateFirstDone);
 
-        let resume = stage.first().unwrap_complete();
+        let resume = stage.init().unwrap_complete();
         assert_eq!("left-done", resume);
     }
 

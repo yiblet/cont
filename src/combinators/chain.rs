@@ -31,7 +31,7 @@ where
                 Step::Yielded(o) => Step::Yielded(o),
                 Step::Complete(a) => {
                     let r = f.take().expect("AndThen::can only be used once")(a);
-                    match r.first() {
+                    match r.init() {
                         Step::Yielded((o, next_r)) => {
                             *self = AndThen::OnSecond(next_r);
                             Step::Yielded(o)

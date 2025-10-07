@@ -18,7 +18,7 @@ where
     S::Next: Sans<I, O>,
     R: FnMut(O) -> I,
 {
-    match stage.first() {
+    match stage.init() {
         Step::Yielded((output, mut next_stage)) => {
             let mut input = responder(output);
             loop {
@@ -88,7 +88,7 @@ where
     R: FnMut(O) -> Fut,
     Fut: Future<Output = I>,
 {
-    match stage.first() {
+    match stage.init() {
         Step::Yielded((output, mut next_stage)) => {
             let mut input = responder(output).await;
             loop {
