@@ -8,79 +8,79 @@
 /// ```rust
 /// use cont::Step;
 ///
-/// let continuing: Step<i32, String> = Step::Yield(42);
-/// let completed: Step<i32, String> = Step::Done("finished".to_string());
+/// let continuing: Step<i32, String> = Step::Yielded(42);
+/// let completed: Step<i32, String> = Step::Complete("finished".to_string());
 ///
 /// // Using combinators
-/// let doubled = continuing.map_yield(|x| x * 2);
-/// assert_eq!(doubled, Step::Yield(84));
+/// let doubled = continuing.map_yielded(|x| x * 2);
+/// assert_eq!(doubled, Step::Yielded(84));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Step<Y, D> {
     /// Continue computation with an intermediate yield value
-    Yield(Y),
-    /// Complete computation with a final done value
-    Done(D),
+    Yielded(Y),
+    /// Complete computation with a final value
+    Complete(D),
 }
 
 impl<Y, D> Step<Y, D> {
-    /// Returns `true` if the step is `Yield`.
+    /// Returns `true` if the step is `Yielded`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert!(x.is_yield());
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert!(x.is_yielded());
     ///
-    /// let y: Step<i32, &str> = Step::Done("complete");
-    /// assert!(!y.is_yield());
+    /// let y: Step<i32, &str> = Step::Complete("complete");
+    /// assert!(!y.is_yielded());
     /// ```
     #[inline]
-    pub const fn is_yield(&self) -> bool {
-        matches!(self, Step::Yield(_))
+    pub const fn is_yielded(&self) -> bool {
+        matches!(self, Step::Yielded(_))
     }
 
-    /// Returns `true` if the step is `Done`.
+    /// Returns `true` if the step is `Complete`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// assert!(x.is_done());
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// assert!(x.is_complete());
     ///
-    /// let y: Step<i32, &str> = Step::Yield(42);
-    /// assert!(!y.is_done());
+    /// let y: Step<i32, &str> = Step::Yielded(42);
+    /// assert!(!y.is_complete());
     /// ```
     #[inline]
-    pub const fn is_done(&self) -> bool {
-        matches!(self, Step::Done(_))
+    pub const fn is_complete(&self) -> bool {
+        matches!(self, Step::Complete(_))
     }
 
     /// Converts from `Step<Y, D>` to `Option<Y>`.
     ///
     /// Converts `self` into an `Option<Y>`, consuming `self`,
-    /// and discarding the done value, if any.
+    /// and discarding the complete value, if any.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(x.yield_value(), Some(42));
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(x.yielded_value(), Some(42));
     ///
-    /// let y: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(y.yield_value(), None);
+    /// let y: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(y.yielded_value(), None);
     /// ```
     #[inline]
-    pub fn yield_value(self) -> Option<Y> {
+    pub fn yielded_value(self) -> Option<Y> {
         match self {
-            Step::Yield(y) => Some(y),
-            Step::Done(_) => None,
+            Step::Yielded(y) => Some(y),
+            Step::Complete(_) => None,
         }
     }
 
@@ -94,65 +94,65 @@ impl<Y, D> Step<Y, D> {
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(x.done_value(), Some("complete"));
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(x.complete_value(), Some("complete"));
     ///
-    /// let y: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(y.done_value(), None);
+    /// let y: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(y.complete_value(), None);
     /// ```
     #[inline]
-    pub fn done_value(self) -> Option<D> {
+    pub fn complete_value(self) -> Option<D> {
         match self {
-            Step::Yield(_) => None,
-            Step::Done(d) => Some(d),
+            Step::Yielded(_) => None,
+            Step::Complete(d) => Some(d),
         }
     }
 
-    /// Maps a `Step<Y, D>` to `Step<Y, D2>` by applying a function to the done value.
+    /// Maps a `Step<Y, D>` to `Step<Y, D2>` by applying a function to the complete value.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, i32> = Step::Done(5);
-    /// assert_eq!(x.map_done(|v| v * 2), Step::Done(10));
+    /// let x: Step<i32, i32> = Step::Complete(5);
+    /// assert_eq!(x.map_complete(|v| v * 2), Step::Complete(10));
     ///
-    /// let y: Step<i32, i32> = Step::Yield(3);
-    /// assert_eq!(y.map_done(|v| v * 2), Step::Yield(3));
+    /// let y: Step<i32, i32> = Step::Yielded(3);
+    /// assert_eq!(y.map_complete(|v| v * 2), Step::Yielded(3));
     /// ```
     #[inline]
-    pub fn map_done<D2, F>(self, f: F) -> Step<Y, D2>
+    pub fn map_complete<D2, F>(self, f: F) -> Step<Y, D2>
     where
         F: FnOnce(D) -> D2,
     {
         match self {
-            Step::Yield(y) => Step::Yield(y),
-            Step::Done(d) => Step::Done(f(d)),
+            Step::Yielded(y) => Step::Yielded(y),
+            Step::Complete(d) => Step::Complete(f(d)),
         }
     }
 
-    /// Maps a `Step<Y, D>` to `Step<Y2, D>` by applying a function to the yield value.
+    /// Maps a `Step<Y, D>` to `Step<Y2, D>` by applying a function to the yielded value.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(x.map_yield(|v| v * 2), Step::Yield(84));
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(x.map_yielded(|v| v * 2), Step::Yielded(84));
     ///
-    /// let y: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(y.map_yield(|v: i32| v * 2), Step::Done("complete"));
+    /// let y: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(y.map_yielded(|v: i32| v * 2), Step::Complete("complete"));
     /// ```
     #[inline]
-    pub fn map_yield<Y2, F>(self, f: F) -> Step<Y2, D>
+    pub fn map_yielded<Y2, F>(self, f: F) -> Step<Y2, D>
     where
         F: FnOnce(Y) -> Y2,
     {
         match self {
-            Step::Yield(y) => Step::Yield(f(y)),
-            Step::Done(d) => Step::Done(d),
+            Step::Yielded(y) => Step::Yielded(f(y)),
+            Step::Complete(d) => Step::Complete(d),
         }
     }
 
@@ -163,11 +163,11 @@ impl<Y, D> Step<Y, D> {
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, i32> = Step::Yield(42);
-    /// assert_eq!(x.map(|y| y * 2, |d| d + 1), Step::Yield(84));
+    /// let x: Step<i32, i32> = Step::Yielded(42);
+    /// assert_eq!(x.map(|y| y * 2, |d| d + 1), Step::Yielded(84));
     ///
-    /// let y: Step<i32, i32> = Step::Done(10);
-    /// assert_eq!(y.map(|y| y * 2, |d| d + 1), Step::Done(11));
+    /// let y: Step<i32, i32> = Step::Complete(10);
+    /// assert_eq!(y.map(|y| y * 2, |d| d + 1), Step::Complete(11));
     /// ```
     #[inline]
     pub fn map<Y2, D2, FY, FD>(self, fy: FY, fd: FD) -> Step<Y2, D2>
@@ -176,98 +176,98 @@ impl<Y, D> Step<Y, D> {
         FD: FnOnce(D) -> D2,
     {
         match self {
-            Step::Yield(y) => Step::Yield(fy(y)),
-            Step::Done(d) => Step::Done(fd(d)),
+            Step::Yielded(y) => Step::Yielded(fy(y)),
+            Step::Complete(d) => Step::Complete(fd(d)),
         }
     }
 
-    /// Returns the yield value or a default.
+    /// Returns the yielded value or a default.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(x.yield_or(0), 42);
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(x.yielded_or(0), 42);
     ///
-    /// let y: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(y.yield_or(0), 0);
+    /// let y: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(y.yielded_or(0), 0);
     /// ```
     #[inline]
-    pub fn yield_or(self, default: Y) -> Y {
+    pub fn yielded_or(self, default: Y) -> Y {
         match self {
-            Step::Yield(y) => y,
-            Step::Done(_) => default,
+            Step::Yielded(y) => y,
+            Step::Complete(_) => default,
         }
     }
 
-    /// Returns the yield value or computes it from a closure.
+    /// Returns the yielded value or computes it from a closure.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(x.yield_or_else(|| 0), 42);
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(x.yielded_or_else(|| 0), 42);
     ///
-    /// let y: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(y.yield_or_else(|| 0), 0);
+    /// let y: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(y.yielded_or_else(|| 0), 0);
     /// ```
     #[inline]
-    pub fn yield_or_else<F>(self, f: F) -> Y
+    pub fn yielded_or_else<F>(self, f: F) -> Y
     where
         F: FnOnce() -> Y,
     {
         match self {
-            Step::Yield(y) => y,
-            Step::Done(_) => f(),
+            Step::Yielded(y) => y,
+            Step::Complete(_) => f(),
         }
     }
 
-    /// Returns the done value or a default.
+    /// Returns the complete value or a default.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(x.done_or("default"), "complete");
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(x.complete_or("default"), "complete");
     ///
-    /// let y: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(y.done_or("default"), "default");
+    /// let y: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(y.complete_or("default"), "default");
     /// ```
     #[inline]
-    pub fn done_or(self, default: D) -> D {
+    pub fn complete_or(self, default: D) -> D {
         match self {
-            Step::Yield(_) => default,
-            Step::Done(d) => d,
+            Step::Yielded(_) => default,
+            Step::Complete(d) => d,
         }
     }
 
-    /// Returns the done value or computes it from a closure.
+    /// Returns the complete value or computes it from a closure.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(x.done_or_else(|| "default"), "complete");
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(x.complete_or_else(|| "default"), "complete");
     ///
-    /// let y: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(y.done_or_else(|| "default"), "default");
+    /// let y: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(y.complete_or_else(|| "default"), "default");
     /// ```
     #[inline]
-    pub fn done_or_else<F>(self, f: F) -> D
+    pub fn complete_or_else<F>(self, f: F) -> D
     where
         F: FnOnce() -> D,
     {
         match self {
-            Step::Yield(_) => f(),
-            Step::Done(d) => d,
+            Step::Yielded(_) => f(),
+            Step::Complete(d) => d,
         }
     }
 
@@ -278,17 +278,17 @@ impl<Y, D> Step<Y, D> {
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, String> = Step::Yield(42);
-    /// assert_eq!(x.as_ref(), Step::Yield(&42));
+    /// let x: Step<i32, String> = Step::Yielded(42);
+    /// assert_eq!(x.as_ref(), Step::Yielded(&42));
     ///
-    /// let y: Step<i32, String> = Step::Done("complete".to_string());
-    /// assert_eq!(y.as_ref(), Step::Done(&"complete".to_string()));
+    /// let y: Step<i32, String> = Step::Complete("complete".to_string());
+    /// assert_eq!(y.as_ref(), Step::Complete(&"complete".to_string()));
     /// ```
     #[inline]
     pub const fn as_ref(&self) -> Step<&Y, &D> {
         match self {
-            Step::Yield(y) => Step::Yield(y),
-            Step::Done(d) => Step::Done(d),
+            Step::Yielded(y) => Step::Yielded(y),
+            Step::Complete(d) => Step::Complete(d),
         }
     }
 
@@ -299,17 +299,17 @@ impl<Y, D> Step<Y, D> {
     /// ```rust
     /// use cont::Step;
     ///
-    /// let mut x: Step<i32, String> = Step::Yield(42);
-    /// if let Step::Yield(y) = x.as_mut() {
+    /// let mut x: Step<i32, String> = Step::Yielded(42);
+    /// if let Step::Yielded(y) = x.as_mut() {
     ///     *y = 100;
     /// }
-    /// assert_eq!(x, Step::Yield(100));
+    /// assert_eq!(x, Step::Yielded(100));
     /// ```
     #[inline]
     pub fn as_mut(&mut self) -> Step<&mut Y, &mut D> {
         match self {
-            Step::Yield(y) => Step::Yield(y),
-            Step::Done(d) => Step::Done(d),
+            Step::Yielded(y) => Step::Yielded(y),
+            Step::Complete(d) => Step::Complete(d),
         }
     }
 
@@ -320,177 +320,177 @@ impl<Y, D> Step<Y, D> {
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(x.flip(), Step::Done(42));
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(x.flip(), Step::Complete(42));
     ///
-    /// let y: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(y.flip(), Step::Yield("complete"));
+    /// let y: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(y.flip(), Step::Yielded("complete"));
     /// ```
     #[inline]
     pub fn flip(self) -> Step<D, Y> {
         match self {
-            Step::Yield(y) => Step::Done(y),
-            Step::Done(d) => Step::Yield(d),
+            Step::Yielded(y) => Step::Complete(y),
+            Step::Complete(d) => Step::Yielded(d),
         }
     }
 
-    /// Returns `true` if the step is a `Yield` value containing the given value.
+    /// Returns `true` if the step is a `Yielded` value containing the given value.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert!(x.contains_yield(&42));
-    /// assert!(!x.contains_yield(&100));
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert!(x.contains_yielded(&42));
+    /// assert!(!x.contains_yielded(&100));
     ///
-    /// let y: Step<i32, &str> = Step::Done("complete");
-    /// assert!(!y.contains_yield(&42));
+    /// let y: Step<i32, &str> = Step::Complete("complete");
+    /// assert!(!y.contains_yielded(&42));
     /// ```
     #[inline]
-    pub fn contains_yield<U>(&self, y: &U) -> bool
+    pub fn contains_yielded<U>(&self, y: &U) -> bool
     where
         U: PartialEq<Y>,
     {
-        matches!(self, Step::Yield(v) if y == v)
+        matches!(self, Step::Yielded(v) if y == v)
     }
 
-    /// Returns `true` if the step is a `Done` value containing the given value.
+    /// Returns `true` if the step is a `Complete` value containing the given value.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// assert!(x.contains_done(&"complete"));
-    /// assert!(!x.contains_done(&"other"));
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// assert!(x.contains_complete(&"complete"));
+    /// assert!(!x.contains_complete(&"other"));
     ///
-    /// let y: Step<i32, &str> = Step::Yield(42);
-    /// assert!(!y.contains_done(&"complete"));
+    /// let y: Step<i32, &str> = Step::Yielded(42);
+    /// assert!(!y.contains_complete(&"complete"));
     /// ```
     #[inline]
-    pub fn contains_done<U>(&self, d: &U) -> bool
+    pub fn contains_complete<U>(&self, d: &U) -> bool
     where
         U: PartialEq<D>,
     {
-        matches!(self, Step::Done(v) if d == v)
+        matches!(self, Step::Complete(v) if d == v)
     }
 
-    /// Returns the contained `Yield` value, consuming the `self` value.
+    /// Returns the contained `Yielded` value, consuming the `self` value.
     ///
     /// # Panics
     ///
-    /// Panics if the value is a `Done` with a custom panic message provided by `msg`.
+    /// Panics if the value is a `Complete` with a custom panic message provided by `msg`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(x.expect_yield("was done"), 42);
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(x.expect_yielded("was complete"), 42);
     /// ```
     ///
     /// ```should_panic
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// x.expect_yield("the world is ending"); // panics with "the world is ending"
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// x.expect_yielded("the world is ending"); // panics with "the world is ending"
     /// ```
     #[inline]
-    pub fn expect_yield(self, msg: &str) -> Y {
+    pub fn expect_yielded(self, msg: &str) -> Y {
         match self {
-            Step::Yield(y) => y,
-            Step::Done(_) => panic!("{}", msg),
+            Step::Yielded(y) => y,
+            Step::Complete(_) => panic!("{}", msg),
         }
     }
 
-    /// Returns the contained `Done` value, consuming the `self` value.
+    /// Returns the contained `Complete` value, consuming the `self` value.
     ///
     /// # Panics
     ///
-    /// Panics if the value is a `Yield` with a custom panic message provided by `msg`.
+    /// Panics if the value is a `Yielded` with a custom panic message provided by `msg`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(x.expect_done("was yielding"), "complete");
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(x.expect_complete("was yielding"), "complete");
     /// ```
     ///
     /// ```should_panic
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// x.expect_done("the world is ending"); // panics with "the world is ending"
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// x.expect_complete("the world is ending"); // panics with "the world is ending"
     /// ```
     #[inline]
-    pub fn expect_done(self, msg: &str) -> D {
+    pub fn expect_complete(self, msg: &str) -> D {
         match self {
-            Step::Yield(_) => panic!("{}", msg),
-            Step::Done(d) => d,
+            Step::Yielded(_) => panic!("{}", msg),
+            Step::Complete(d) => d,
         }
     }
 
-    /// Returns the contained `Yield` value, consuming the `self` value.
+    /// Returns the contained `Yielded` value, consuming the `self` value.
     ///
     /// # Panics
     ///
-    /// Panics if the value is a `Done`.
+    /// Panics if the value is a `Complete`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// assert_eq!(x.unwrap_yield(), 42);
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// assert_eq!(x.unwrap_yielded(), 42);
     /// ```
     ///
     /// ```should_panic
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// x.unwrap_yield(); // panics
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// x.unwrap_yielded(); // panics
     /// ```
     #[inline]
-    pub fn unwrap_yield(self) -> Y {
+    pub fn unwrap_yielded(self) -> Y {
         match self {
-            Step::Yield(y) => y,
-            Step::Done(_) => panic!("called `Step::unwrap_yield()` on a `Done` value"),
+            Step::Yielded(y) => y,
+            Step::Complete(_) => panic!("called `Step::unwrap_yielded()` on a `Complete` value"),
         }
     }
 
-    /// Returns the contained `Done` value, consuming the `self` value.
+    /// Returns the contained `Complete` value, consuming the `self` value.
     ///
     /// # Panics
     ///
-    /// Panics if the value is a `Yield`.
+    /// Panics if the value is a `Yielded`.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Done("complete");
-    /// assert_eq!(x.unwrap_done(), "complete");
+    /// let x: Step<i32, &str> = Step::Complete("complete");
+    /// assert_eq!(x.unwrap_complete(), "complete");
     /// ```
     ///
     /// ```should_panic
     /// use cont::Step;
     ///
-    /// let x: Step<i32, &str> = Step::Yield(42);
-    /// x.unwrap_done(); // panics
+    /// let x: Step<i32, &str> = Step::Yielded(42);
+    /// x.unwrap_complete(); // panics
     /// ```
     #[inline]
-    pub fn unwrap_done(self) -> D {
+    pub fn unwrap_complete(self) -> D {
         match self {
-            Step::Yield(_) => panic!("called `Step::unwrap_done()` on a `Yield` value"),
-            Step::Done(d) => d,
+            Step::Yielded(_) => panic!("called `Step::unwrap_complete()` on a `Yielded` value"),
+            Step::Complete(d) => d,
         }
     }
 }
@@ -500,172 +500,172 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_yield_and_is_done() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        let d: Step<i32, &str> = Step::Done("complete");
+    fn test_is_yielded_and_is_complete() {
+        let y: Step<i32, &str> = Step::Yielded(42);
+        let d: Step<i32, &str> = Step::Complete("complete");
 
-        assert!(y.is_yield());
-        assert!(!y.is_done());
-        assert!(d.is_done());
-        assert!(!d.is_yield());
+        assert!(y.is_yielded());
+        assert!(!y.is_complete());
+        assert!(d.is_complete());
+        assert!(!d.is_yielded());
     }
 
     #[test]
-    fn test_yield_value_and_done_value() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        let d: Step<i32, &str> = Step::Done("complete");
+    fn test_yielded_value_and_complete_value() {
+        let y: Step<i32, &str> = Step::Yielded(42);
+        let d: Step<i32, &str> = Step::Complete("complete");
 
-        assert_eq!(y.yield_value(), Some(42));
-        assert_eq!(y.done_value(), None);
-        assert_eq!(d.yield_value(), None);
-        assert_eq!(d.done_value(), Some("complete"));
+        assert_eq!(y.yielded_value(), Some(42));
+        assert_eq!(y.complete_value(), None);
+        assert_eq!(d.yielded_value(), None);
+        assert_eq!(d.complete_value(), Some("complete"));
     }
 
     #[test]
-    fn test_map_done() {
-        let y: Step<i32, i32> = Step::Yield(42);
-        let d: Step<i32, i32> = Step::Done(10);
+    fn test_map_complete() {
+        let y: Step<i32, i32> = Step::Yielded(42);
+        let d: Step<i32, i32> = Step::Complete(10);
 
-        assert_eq!(y.map_done(|x| x * 2), Step::Yield(42));
-        assert_eq!(d.map_done(|x| x * 2), Step::Done(20));
+        assert_eq!(y.map_complete(|x| x * 2), Step::Yielded(42));
+        assert_eq!(d.map_complete(|x| x * 2), Step::Complete(20));
     }
 
     #[test]
-    fn test_map_yield() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        let d: Step<i32, &str> = Step::Done("complete");
+    fn test_map_yielded() {
+        let y: Step<i32, &str> = Step::Yielded(42);
+        let d: Step<i32, &str> = Step::Complete("complete");
 
-        assert_eq!(y.map_yield(|x| x * 2), Step::Yield(84));
-        assert_eq!(d.map_yield(|x: i32| x * 2), Step::Done("complete"));
+        assert_eq!(y.map_yielded(|x| x * 2), Step::Yielded(84));
+        assert_eq!(d.map_yielded(|x: i32| x * 2), Step::Complete("complete"));
     }
 
     #[test]
     fn test_map() {
-        let y: Step<i32, i32> = Step::Yield(42);
-        let d: Step<i32, i32> = Step::Done(10);
+        let y: Step<i32, i32> = Step::Yielded(42);
+        let d: Step<i32, i32> = Step::Complete(10);
 
-        assert_eq!(y.map(|x| x * 2, |x| x + 1), Step::Yield(84));
-        assert_eq!(d.map(|x| x * 2, |x| x + 1), Step::Done(11));
+        assert_eq!(y.map(|x| x * 2, |x| x + 1), Step::Yielded(84));
+        assert_eq!(d.map(|x| x * 2, |x| x + 1), Step::Complete(11));
     }
 
     #[test]
-    fn test_yield_or_and_done_or() {
-        let y: Step<i32, i32> = Step::Yield(42);
-        let d: Step<i32, i32> = Step::Done(10);
+    fn test_yielded_or_and_complete_or() {
+        let y: Step<i32, i32> = Step::Yielded(42);
+        let d: Step<i32, i32> = Step::Complete(10);
 
-        assert_eq!(y.clone().yield_or(0), 42);
-        assert_eq!(d.clone().yield_or(0), 0);
-        assert_eq!(y.clone().done_or(0), 0);
-        assert_eq!(d.clone().done_or(0), 10);
+        assert_eq!(y.clone().yielded_or(0), 42);
+        assert_eq!(d.clone().yielded_or(0), 0);
+        assert_eq!(y.clone().complete_or(0), 0);
+        assert_eq!(d.clone().complete_or(0), 10);
     }
 
     #[test]
-    fn test_yield_or_else_and_done_or_else() {
-        let y: Step<i32, i32> = Step::Yield(42);
-        let d: Step<i32, i32> = Step::Done(10);
+    fn test_yielded_or_else_and_complete_or_else() {
+        let y: Step<i32, i32> = Step::Yielded(42);
+        let d: Step<i32, i32> = Step::Complete(10);
 
-        assert_eq!(y.clone().yield_or_else(|| 0), 42);
-        assert_eq!(d.clone().yield_or_else(|| 0), 0);
-        assert_eq!(y.clone().done_or_else(|| 0), 0);
-        assert_eq!(d.clone().done_or_else(|| 0), 10);
+        assert_eq!(y.clone().yielded_or_else(|| 0), 42);
+        assert_eq!(d.clone().yielded_or_else(|| 0), 0);
+        assert_eq!(y.clone().complete_or_else(|| 0), 0);
+        assert_eq!(d.clone().complete_or_else(|| 0), 10);
     }
 
     #[test]
     fn test_as_ref() {
-        let y: Step<i32, String> = Step::Yield(42);
-        let d: Step<i32, String> = Step::Done("complete".to_string());
+        let y: Step<i32, String> = Step::Yielded(42);
+        let d: Step<i32, String> = Step::Complete("complete".to_string());
 
-        assert_eq!(y.as_ref(), Step::Yield(&42));
-        assert_eq!(d.as_ref(), Step::Done(&"complete".to_string()));
+        assert_eq!(y.as_ref(), Step::Yielded(&42));
+        assert_eq!(d.as_ref(), Step::Complete(&"complete".to_string()));
     }
 
     #[test]
     fn test_as_mut() {
-        let mut y: Step<i32, String> = Step::Yield(42);
-        if let Step::Yield(v) = y.as_mut() {
+        let mut y: Step<i32, String> = Step::Yielded(42);
+        if let Step::Yielded(v) = y.as_mut() {
             *v = 100;
         }
-        assert_eq!(y, Step::Yield(100));
+        assert_eq!(y, Step::Yielded(100));
 
-        let mut d: Step<i32, String> = Step::Done("complete".to_string());
-        if let Step::Done(v) = d.as_mut() {
+        let mut d: Step<i32, String> = Step::Complete("complete".to_string());
+        if let Step::Complete(v) = d.as_mut() {
             *v = "modified".to_string();
         }
-        assert_eq!(d, Step::Done("modified".to_string()));
+        assert_eq!(d, Step::Complete("modified".to_string()));
     }
 
     #[test]
     fn test_flip() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        let d: Step<i32, &str> = Step::Done("complete");
+        let y: Step<i32, &str> = Step::Yielded(42);
+        let d: Step<i32, &str> = Step::Complete("complete");
 
-        assert_eq!(y.flip(), Step::Done(42));
-        assert_eq!(d.flip(), Step::Yield("complete"));
+        assert_eq!(y.flip(), Step::Complete(42));
+        assert_eq!(d.flip(), Step::Yielded("complete"));
     }
 
     #[test]
     fn test_contains() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        let d: Step<i32, &str> = Step::Done("complete");
+        let y: Step<i32, &str> = Step::Yielded(42);
+        let d: Step<i32, &str> = Step::Complete("complete");
 
-        assert!(y.contains_yield(&42));
-        assert!(!y.contains_yield(&100));
-        assert!(!y.contains_done(&"complete"));
+        assert!(y.contains_yielded(&42));
+        assert!(!y.contains_yielded(&100));
+        assert!(!y.contains_complete(&"complete"));
 
-        assert!(d.contains_done(&"complete"));
-        assert!(!d.contains_done(&"other"));
-        assert!(!d.contains_yield(&42));
+        assert!(d.contains_complete(&"complete"));
+        assert!(!d.contains_complete(&"other"));
+        assert!(!d.contains_yielded(&42));
     }
 
     #[test]
-    fn test_expect_yield() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        assert_eq!(y.expect_yield("should be yield"), 42);
+    fn test_expect_yielded() {
+        let y: Step<i32, &str> = Step::Yielded(42);
+        assert_eq!(y.expect_yielded("should be yielded"), 42);
     }
 
     #[test]
-    #[should_panic(expected = "should be yield")]
-    fn test_expect_yield_panics() {
-        let d: Step<i32, &str> = Step::Done("complete");
-        d.expect_yield("should be yield");
+    #[should_panic(expected = "should be yielded")]
+    fn test_expect_yielded_panics() {
+        let d: Step<i32, &str> = Step::Complete("complete");
+        d.expect_yielded("should be yielded");
     }
 
     #[test]
-    fn test_expect_done() {
-        let d: Step<i32, &str> = Step::Done("complete");
-        assert_eq!(d.expect_done("should be done"), "complete");
+    fn test_expect_complete() {
+        let d: Step<i32, &str> = Step::Complete("complete");
+        assert_eq!(d.expect_complete("should be complete"), "complete");
     }
 
     #[test]
-    #[should_panic(expected = "should be done")]
-    fn test_expect_done_panics() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        y.expect_done("should be done");
+    #[should_panic(expected = "should be complete")]
+    fn test_expect_complete_panics() {
+        let y: Step<i32, &str> = Step::Yielded(42);
+        y.expect_complete("should be complete");
     }
 
     #[test]
-    fn test_unwrap_yield() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        assert_eq!(y.unwrap_yield(), 42);
+    fn test_unwrap_yielded() {
+        let y: Step<i32, &str> = Step::Yielded(42);
+        assert_eq!(y.unwrap_yielded(), 42);
     }
 
     #[test]
-    #[should_panic(expected = "called `Step::unwrap_yield()` on a `Done` value")]
-    fn test_unwrap_yield_panics() {
-        let d: Step<i32, &str> = Step::Done("complete");
-        d.unwrap_yield();
+    #[should_panic(expected = "called `Step::unwrap_yielded()` on a `Complete` value")]
+    fn test_unwrap_yielded_panics() {
+        let d: Step<i32, &str> = Step::Complete("complete");
+        d.unwrap_yielded();
     }
 
     #[test]
-    fn test_unwrap_done() {
-        let d: Step<i32, &str> = Step::Done("complete");
-        assert_eq!(d.unwrap_done(), "complete");
+    fn test_unwrap_complete() {
+        let d: Step<i32, &str> = Step::Complete("complete");
+        assert_eq!(d.unwrap_complete(), "complete");
     }
 
     #[test]
-    #[should_panic(expected = "called `Step::unwrap_done()` on a `Yield` value")]
-    fn test_unwrap_done_panics() {
-        let y: Step<i32, &str> = Step::Yield(42);
-        y.unwrap_done();
+    #[should_panic(expected = "called `Step::unwrap_complete()` on a `Yielded` value")]
+    fn test_unwrap_complete_panics() {
+        let y: Step<i32, &str> = Step::Yielded(42);
+        y.unwrap_complete();
     }
 }

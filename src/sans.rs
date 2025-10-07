@@ -16,8 +16,8 @@ use crate::step::Step;
 /// use cont::*;
 ///
 /// let mut stage = once(|x: i32| x * 2);
-/// assert_eq!(stage.next(5).unwrap_yield(), 10);
-/// assert_eq!(stage.next(3).unwrap_done(), 3); // Done
+/// assert_eq!(stage.next(5).unwrap_yielded(), 10);
+/// assert_eq!(stage.next(3).unwrap_complete(), 3); // Done
 /// ```
 pub trait Sans<A> {
     /// Type of intermediate values yielded during computation
@@ -102,8 +102,8 @@ where
     type Done = Result<C::Done, PoisonError>;
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.lock().map_err(|_| PoisonError) {
-            Ok(mut f) => f.next(input).map_done(Ok),
-            Err(e) => Step::Done(Err(e)),
+            Ok(mut f) => f.next(input).map_complete(Ok),
+            Err(e) => Step::Complete(Err(e)),
         }
     }
 }
@@ -160,7 +160,7 @@ where
     type Yield = Y;
     type Done = A;
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
-        Step::Yield(self.0(input))
+        Step::Yielded(self.0(input))
     }
 }
 
@@ -175,8 +175,8 @@ pub struct Once<F>(Option<F>);
 /// use cont::*;
 ///
 /// let mut stage = once(|x: i32| x + 10);
-/// assert_eq!(stage.next(5).unwrap_yield(), 15);
-/// assert_eq!(stage.next(3).unwrap_done(), 3); // Done
+/// assert_eq!(stage.next(5).unwrap_yielded(), 15);
+/// assert_eq!(stage.next(3).unwrap_complete(), 3); // Done
 /// ```
 pub fn once<F>(f: F) -> Once<F> {
     Once(Some(f))
@@ -196,8 +196,8 @@ where
     type Done = A;
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.0.take() {
-            Some(f) => Step::Yield(f(input)),
-            None => Step::Done(input),
+            Some(f) => Step::Yielded(f(input)),
+            None => Step::Complete(input),
         }
     }
 }
@@ -230,8 +230,8 @@ where
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.0 {
             Some(ref mut l) => match l.next(input) {
-                Step::Yield(y) => Step::Yield(y),
-                Step::Done(a) => {
+                Step::Yielded(y) => Step::Yielded(y),
+                Step::Complete(a) => {
                     self.0 = None; // we drop the old stage when it's done
                     self.1.next(a)
                 }
@@ -279,8 +279,8 @@ where
     type Done = S::Done;
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.stage.next(input) {
-            Step::Yield(y1) => Step::Yield((self.f)(y1)),
-            Step::Done(a) => Step::Done(a),
+            Step::Yielded(y1) => Step::Yielded((self.f)(y1)),
+            Step::Complete(a) => Step::Complete(a),
         }
     }
 }
@@ -302,8 +302,8 @@ where
     type Done = D2;
     fn next(&mut self, input: A) -> Step<Self::Yield, Self::Done> {
         match self.stage.next(input) {
-            Step::Yield(y) => Step::Yield(y),
-            Step::Done(r1) => Step::Done((self.f)(r1)),
+            Step::Yielded(y) => Step::Yielded(y),
+            Step::Complete(r1) => Step::Complete((self.f)(r1)),
         }
     }
 }
@@ -314,8 +314,8 @@ where
 /// use cont::*;
 ///
 /// let mut doubler = repeat(|x: i32| x * 2);
-/// assert_eq!(doubler.next(5).unwrap_yield(), 10);
-/// assert_eq!(doubler.next(3).unwrap_yield(), 6);
+/// assert_eq!(doubler.next(5).unwrap_yielded(), 10);
+/// assert_eq!(doubler.next(3).unwrap_yielded(), 6);
 /// // Continues forever...
 /// ```
 pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
@@ -328,10 +328,10 @@ pub fn repeat<A, Y, F: FnMut(A) -> Y>(f: F) -> Repeat<F> {
 /// use cont::*;
 ///
 /// let mut toggle = from_fn(|x: bool| {
-///     if x { Step::Yield(!x) } else { Step::Done(x) }
+///     if x { Step::Yielded(!x) } else { Step::Complete(x) }
 /// });
-/// assert_eq!(toggle.next(true).unwrap_yield(), false);
-/// assert_eq!(toggle.next(false).unwrap_done(), false);
+/// assert_eq!(toggle.next(true).unwrap_yielded(), false);
+/// assert_eq!(toggle.next(false).unwrap_complete(), false);
 /// ```
 pub fn from_fn<F>(f: F) -> FromFn<F> {
     FromFn(f)
@@ -345,18 +345,18 @@ mod tests {
     fn test_chain_switches_to_second_stage_after_first_done() {
         let mut stage = once(|val: u32| val + 1).chain(repeat(|val: u32| val * 2));
 
-        assert_eq!(stage.next(3).unwrap_yield(), 4);
-        assert_eq!(stage.next(4).unwrap_yield(), 8);
-        assert_eq!(stage.next(5).unwrap_yield(), 10);
+        assert_eq!(stage.next(3).unwrap_yielded(), 4);
+        assert_eq!(stage.next(4).unwrap_yielded(), 8);
+        assert_eq!(stage.next(5).unwrap_yielded(), 10);
     }
 
     #[test]
     fn test_chain_propagates_done_from_second_stage() {
         let mut stage = chain(once(|val: u32| val + 1), once(|val: u32| val * 2));
 
-        assert_eq!(stage.next(2).unwrap_yield(), 3);
-        assert_eq!(stage.next(3).unwrap_yield(), 6);
-        assert_eq!(stage.next(4).unwrap_done(), 4);
+        assert_eq!(stage.next(2).unwrap_yielded(), 3);
+        assert_eq!(stage.next(3).unwrap_yielded(), 6);
+        assert_eq!(stage.next(4).unwrap_complete(), 4);
     }
 
     #[test]
@@ -364,8 +364,8 @@ mod tests {
         let mut stage = chain(once(|val: u32| val + 1), once(|val: u32| val * 2))
             .map_done(|done: u32| format!("resume={done}"));
 
-        assert_eq!(stage.next(5).unwrap_yield(), 6);
-        assert_eq!(stage.next(6).unwrap_yield(), 12);
-        assert_eq!(stage.next(7).unwrap_done(), "resume=7".to_string());
+        assert_eq!(stage.next(5).unwrap_yielded(), 6);
+        assert_eq!(stage.next(6).unwrap_yielded(), 12);
+        assert_eq!(stage.next(7).unwrap_complete(), "resume=7".to_string());
     }
 }

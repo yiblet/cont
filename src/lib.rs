@@ -11,7 +11,7 @@
 //! ## Key Features
 //!
 //! - **Composable**: Chain stages together with `.chain()`
-//! - **Transformable**: Use `.map_input()`, `.map_yield()`, `.map_done()`
+//! - **Transformable**: Use `.map_input()`, `.map_yielded()`, `.map_complete()`
 //! - **Async Support**: Both sync and async execution with `handle()` and `handle_async()`
 //!
 //! ## Example
@@ -38,10 +38,6 @@
 //! **Execution:**
 //! - [`handle(stage, responder)`] - Drive computation with sync responses
 //! - [`handle_async(stage, responder)`] - Drive computation with async responses
-//!
-//! **Utilities:**
-//! - [`with_input(input, cont)`] - Bundle continuation with initial input
-//!
 
 mod handler;
 mod init;

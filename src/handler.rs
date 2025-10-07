@@ -19,18 +19,18 @@ where
     R: FnMut(<S::Next as Sans<A>>::Yield) -> A,
 {
     match stage.first() {
-        Step::Yield((yielded, mut next_stage)) => {
+        Step::Yielded((yielded, mut next_stage)) => {
             let mut input = responder(yielded);
             loop {
                 match next_stage.next(input) {
-                    Step::Yield(yielded) => {
+                    Step::Yielded(yielded) => {
                         input = responder(yielded);
                     }
-                    Step::Done(done) => return done,
+                    Step::Complete(done) => return done,
                 }
             }
         }
-        Step::Done(done) => done,
+        Step::Complete(done) => done,
     }
 }
 
@@ -44,10 +44,10 @@ where
 {
     loop {
         match stage.next(input) {
-            Step::Yield(yielded) => {
+            Step::Yielded(yielded) => {
                 input = responder(yielded);
             }
-            Step::Done(done) => return done,
+            Step::Complete(done) => return done,
         }
     }
 }
@@ -67,10 +67,10 @@ where
 {
     loop {
         match stage.next(input) {
-            Step::Yield(yielded) => {
+            Step::Yielded(yielded) => {
                 input = responder(yielded).await;
             }
-            Step::Done(done) => return done,
+            Step::Complete(done) => return done,
         }
     }
 }
@@ -89,18 +89,18 @@ where
     Fut: Future<Output = A>,
 {
     match stage.first() {
-        Step::Yield((yielded, mut next_stage)) => {
+        Step::Yielded((yielded, mut next_stage)) => {
             let mut input = responder(yielded).await;
             loop {
                 match next_stage.next(input) {
-                    Step::Yield(yielded) => {
+                    Step::Yielded(yielded) => {
                         input = responder(yielded).await;
                     }
-                    Step::Done(done) => return done,
+                    Step::Complete(done) => return done,
                 }
             }
         }
-        Step::Done(done) => done,
+        Step::Complete(done) => done,
     }
 }
 
@@ -134,57 +134,6 @@ where
     Fut: Future<Output = A>,
 {
     handle_init_async(stage, responder).await
-}
-
-/// Bundles a continuation with initial input to make it usable with `handle()`.
-///
-/// Converts any `Sans` into an `InitSans` stage by providing the initial input upfront.
-/// This allows using regular continuations with the `handle()` function family.
-pub struct Seed<C, A> {
-    stage: C,
-    input: Option<A>,
-}
-
-impl<C, A> Seed<C, A> {
-    pub fn new(stage: C, input: A) -> Self {
-        Seed {
-            stage,
-            input: Some(input),
-        }
-    }
-}
-
-/// Create a `Seed` with more natural parameter order: input first, then continuation.
-///
-/// ```rust
-/// use cont::*;
-///
-/// let result = handle(
-///     with_input(42, once(|x: i32| x / 2)),
-///     |yielded| yielded + 1
-/// );
-/// ```
-pub fn with_input<A, C>(input: A, stage: C) -> Seed<C, A>
-where
-    C: Sans<A>,
-{
-    Seed::new(stage, input)
-}
-
-impl<A, C> InitSans<A> for Seed<C, A>
-where
-    C: Sans<A>,
-{
-    type Next = C;
-
-    fn first(self) -> Step<(C::Yield, C), C::Done> {
-        let Seed { mut stage, input } = self;
-        let input = input.expect("seed input must exist");
-        match stage.next(input) {
-            Step::Yield(yielded) => Step::Yield((yielded, stage)),
-            Step::Done(done) => Step::Done(done),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -323,16 +272,16 @@ mod tests {
     #[test]
     fn test_handle_shortcut_for_cont_with_input_helper() {
         let stage = once(|n: u32| n + 2);
-        let done = handle(with_input(1_u32, stage), |value: u32| value + 1);
-        assert_eq!(done, 4);
+        let done = handle((1_u32, stage), |value: u32| value + 1);
+        assert_eq!(done, 5);
     }
 
     #[test]
     fn test_handle_async_shortcut_for_cont_with_input_helper() {
         let stage = once(|n: u32| n + 2);
-        let done = block_on(handle_async(with_input(1_u32, stage), |value: u32| {
+        let done = block_on(handle_async((1_u32, stage), |value: u32| {
             ready(value + 1)
         }));
-        assert_eq!(done, 4);
+        assert_eq!(done, 5);
     }
 }
