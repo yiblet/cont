@@ -4,4 +4,4 @@ version = "0.1.0-alpha.2"
 edition = "2024"
 
 [dependencies]
-either = "1.15.0"
+either = "1"
