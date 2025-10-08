@@ -617,6 +617,7 @@ mod tests {
     fn test_join_empty_array() {
         use crate::combinators::func;
         // Need a concrete type for empty array
+        #[allow(clippy::type_complexity)]
         let joined: Join<0, func::Repeat<fn(i32) -> i32>, i32, i32> = join([]);
 
         // Should immediately complete with empty array
@@ -678,6 +679,7 @@ mod tests {
     #[test]
     fn test_join_vec_empty() {
         use crate::combinators::func;
+        #[allow(clippy::type_complexity)]
         let sans: Vec<func::Repeat<fn(i32) -> i32>> = vec![];
         let mut joined = join_vec(sans);
 
@@ -724,7 +726,7 @@ mod tests {
         let mut joined = init_join_vec(inits);
 
         // Should have initial outputs available
-        let mut found = vec![false, false, false];
+        let mut found = [false, false, false];
         for _ in 0..3 {
             match joined.next(Poll::Poll) {
                 Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {

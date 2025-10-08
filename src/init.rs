@@ -354,6 +354,7 @@ mod tests {
 
     #[test]
     fn test_either_first_right_branch_selected() {
+        #[allow(clippy::type_complexity)]
         let stage: either::Either<(i32, Repeat<fn(i32) -> i32>), (i32, Repeat<fn(i32) -> i32>)> =
             either::Either::Right(init_repeat(2_i32, add_three));
 

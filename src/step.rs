@@ -553,10 +553,10 @@ mod tests {
         let y: Step<i32, i32> = Step::Yielded(42);
         let d: Step<i32, i32> = Step::Complete(10);
 
-        assert_eq!(y.clone().yielded_or(0), 42);
-        assert_eq!(d.clone().yielded_or(0), 0);
-        assert_eq!(y.clone().complete_or(0), 0);
-        assert_eq!(d.clone().complete_or(0), 10);
+        assert_eq!(y.yielded_or(0), 42);
+        assert_eq!(d.yielded_or(0), 0);
+        assert_eq!(y.complete_or(0), 0);
+        assert_eq!(d.complete_or(0), 10);
     }
 
     #[test]
@@ -564,10 +564,10 @@ mod tests {
         let y: Step<i32, i32> = Step::Yielded(42);
         let d: Step<i32, i32> = Step::Complete(10);
 
-        assert_eq!(y.clone().yielded_or_else(|| 0), 42);
-        assert_eq!(d.clone().yielded_or_else(|| 0), 0);
-        assert_eq!(y.clone().complete_or_else(|| 0), 0);
-        assert_eq!(d.clone().complete_or_else(|| 0), 10);
+        assert_eq!(y.yielded_or_else(|| 0), 42);
+        assert_eq!(d.yielded_or_else(|| 0), 0);
+        assert_eq!(y.complete_or_else(|| 0), 0);
+        assert_eq!(d.complete_or_else(|| 0), 10);
     }
 
     #[test]
