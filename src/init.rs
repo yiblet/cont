@@ -1,6 +1,6 @@
 use crate::{
-    Chain, FromFn, MapReturn, MapInput, MapYield, Once, Repeat, Sans, Step, chain, from_fn, map_return,
-    map_input, map_yield, once, repeat,
+    Chain, FromFn, MapInput, MapReturn, MapYield, Once, Repeat, Sans, Step, chain, from_fn,
+    map_input, map_return, map_yield, once, repeat,
 };
 
 /// Computations that yield an initial value before processing input.
@@ -135,6 +135,23 @@ where
     }
 }
 
+impl<I, O, C> InitSans<I, O> for Option<C>
+where
+    C: InitSans<I, O>,
+{
+    type Next = Option<C::Next>;
+
+    fn init(self) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Return> {
+        match self {
+            Some(c) => match c.init() {
+                Step::Yielded((o, next)) => Step::Yielded((o, Some(next))),
+                Step::Complete(d) => Step::Complete(Some(d)),
+            },
+            None => Step::Complete(None),
+        }
+    }
+}
+
 impl<I, O, L, R> InitSans<I, O> for either::Either<L, R>
 where
     L: InitSans<I, O>,
@@ -228,8 +245,10 @@ mod tests {
 
         fn init(
             self,
-        ) -> Step<(&'static str, Self::Next), <Self::Next as Sans<&'static str, &'static str>>::Return>
-        {
+        ) -> Step<
+            (&'static str, Self::Next),
+            <Self::Next as Sans<&'static str, &'static str>>::Return,
+        > {
             Step::Complete("left-done")
         }
     }

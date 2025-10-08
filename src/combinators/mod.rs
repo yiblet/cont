@@ -1,7 +1,9 @@
-pub mod chain;
-pub mod func;
-pub mod map;
+mod chain;
+mod func;
+mod map;
+mod sequence;
 
 pub use chain::*;
 pub use func::*;
 pub use map::*;
+pub use sequence::{Many, many};

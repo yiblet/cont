@@ -6,9 +6,11 @@ use std::{
 };
 
 use crate::{
-    combinators::{chain, once, repeat, Chain, MapInput, MapReturn, MapYield, Once, Repeat, AndThen, and_then},
-    step::Step,
     InitSans,
+    combinators::{
+        AndThen, Chain, MapInput, MapReturn, MapYield, Once, Repeat, and_then, chain, once, repeat,
+    },
+    step::Step,
 };
 
 /// Core trait for stateful computations that process input and yield intermediate values.
@@ -79,7 +81,7 @@ pub trait Sans<I, O> {
         Self: Sized,
         F: FnMut(I2) -> I,
     {
-        crate::combinators::map::map_input(f, self)
+        crate::combinators::map_input(f, self)
     }
 
     /// Transform yielded values before returning them.
@@ -88,7 +90,7 @@ pub trait Sans<I, O> {
         Self: Sized,
         F: FnMut(O) -> O2,
     {
-        crate::combinators::map::map_yield(f, self)
+        crate::combinators::map_yield(f, self)
     }
 
     /// Transform the final result when completing.
@@ -97,7 +99,7 @@ pub trait Sans<I, O> {
         Self: Sized,
         F: FnMut(Self::Return) -> D2,
     {
-        crate::combinators::map::map_return(f, self)
+        crate::combinators::map_return(f, self)
     }
 }
 
@@ -133,6 +135,19 @@ where
     fn next(&mut self, input: I) -> Step<O, Self::Return> {
         let mut v = self.as_ref().borrow_mut();
         v.next(input)
+    }
+}
+
+impl<I, O, C> Sans<I, O> for Option<C>
+where
+    C: Sans<I, O>,
+{
+    type Return = Option<C::Return>;
+    fn next(&mut self, input: I) -> Step<O, Self::Return> {
+        match self {
+            Some(c) => c.next(input).map_complete(Some),
+            None => Step::Complete(None),
+        }
     }
 }
 
