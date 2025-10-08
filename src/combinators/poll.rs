@@ -47,6 +47,7 @@ pub enum Poll<I> {
     Input(I),
 }
 
+#[derive(Debug)]
 pub enum PollOutput<I, O> {
     Output(O),
     Complete,
@@ -143,4 +144,187 @@ where
             Step::Complete(r) => Step::Complete(r),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::combinators::func::{once, repeat};
+
+    #[test]
+    fn test_poll_basic_needs_input() {
+        let stage = repeat(|x: i32| x + 1);
+        let mut pollable = poll(stage);
+
+        // Initially, polling should indicate needs input
+        match pollable.next(Poll::Poll) {
+            Step::Yielded(PollOutput::NeedsInput) => {}
+            _ => panic!("Expected NeedsInput"),
+        }
+    }
+
+    #[test]
+    fn test_poll_input_yields_output() {
+        let stage = repeat(|x: i32| x + 1);
+        let mut pollable = poll(stage);
+
+        // Send input
+        match pollable.next(Poll::Input(5)) {
+            Step::Yielded(PollOutput::Output(6)) => {}
+            _ => panic!("Expected Output(6)"),
+        }
+    }
+
+    #[test]
+    fn test_poll_sequence_poll_input_poll() {
+        let stage = repeat(|x: i32| x * 2);
+        let mut pollable = poll(stage);
+
+        // Poll -> NeedsInput
+        match pollable.next(Poll::Poll) {
+            Step::Yielded(PollOutput::NeedsInput) => {}
+            _ => panic!("Expected NeedsInput"),
+        }
+
+        // Input -> Output
+        match pollable.next(Poll::Input(10)) {
+            Step::Yielded(PollOutput::Output(20)) => {}
+            _ => panic!("Expected Output(20)"),
+        }
+
+        // Poll again -> NeedsInput
+        match pollable.next(Poll::Poll) {
+            Step::Yielded(PollOutput::NeedsInput) => {}
+            _ => panic!("Expected NeedsInput"),
+        }
+    }
+
+    #[test]
+    fn test_poll_completion() {
+        let stage = once(|x: i32| x + 10);
+        let mut pollable = poll(stage);
+
+        // Input yields output first
+        match pollable.next(Poll::Input(5)) {
+            Step::Yielded(PollOutput::Output(15)) => {}
+            other => panic!("Expected Output(15), got {:?}", other),
+        }
+
+        // Then send another input to complete (once completes on second input)
+        match pollable.next(Poll::Input(99)) {
+            Step::Complete(Ok(99)) => {} // once returns the final input value
+            other => panic!("Expected Complete(Ok(99)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_poll_already_complete_error() {
+        let stage = once(|x: i32| x + 1);
+        let mut pollable = poll(stage);
+
+        // Send input, get output
+        pollable.next(Poll::Input(5)).expect_yielded("should yield");
+
+        // Send another input to complete
+        let _ = pollable.next(Poll::Input(10)).expect_complete("should complete");
+
+        // Try to poll after completion
+        match pollable.next(Poll::Poll) {
+            Step::Complete(Err(PollError::AlreadyComplete)) => {}
+            _ => panic!("Expected AlreadyComplete error"),
+        }
+
+        // Try to send input after completion
+        match pollable.next(Poll::Input(20)) {
+            Step::Complete(Err(PollError::AlreadyComplete)) => {}
+            _ => panic!("Expected AlreadyComplete error"),
+        }
+    }
+
+    #[test]
+    fn test_poll_needs_poll_with_init() {
+        // Use init_poll with a tuple to create SansOutput state
+        let init = (100, repeat(|x: i32| x * 3));
+        let mut pollable = init_poll(init);
+
+        // Send input while in SansOutput state (before polling) - should get NeedsPoll
+        match pollable.next(Poll::Input(5)) {
+            Step::Yielded(PollOutput::NeedsPoll(5)) => {}
+            other => panic!("Expected NeedsPoll(5), got {:?}", other),
+        }
+
+        // Now poll to get the initial output
+        match pollable.next(Poll::Poll) {
+            Step::Yielded(PollOutput::Output(100)) => {}
+            other => panic!("Expected Output(100), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_init_poll_with_tuple_init() {
+        use crate::combinators::func::repeat;
+
+        let init = (100, repeat(|x: i32| x + 1));
+        let mut pollable = init_poll(init);
+
+        // First poll should yield the initial output
+        match pollable.next(Poll::Poll) {
+            Step::Yielded(PollOutput::Output(100)) => {}
+            other => panic!("Expected Output(100), got {:?}", other),
+        }
+
+        // Now it should need input
+        match pollable.next(Poll::Poll) {
+            Step::Yielded(PollOutput::NeedsInput) => {}
+            other => panic!("Expected NeedsInput, got {:?}", other),
+        }
+
+        // Send input
+        match pollable.next(Poll::Input(5)) {
+            Step::Yielded(PollOutput::Output(6)) => {}
+            other => panic!("Expected Output(6), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_pollable_multiple_inputs_outputs() {
+        let stage = repeat(|x: i32| x * 2);
+        let mut pollable = poll(stage);
+
+        for i in 1..=5 {
+            // Poll
+            assert!(matches!(pollable.next(Poll::Poll), Step::Yielded(PollOutput::NeedsInput)));
+
+            // Input
+            match pollable.next(Poll::Input(i)) {
+                Step::Yielded(PollOutput::Output(o)) => assert_eq!(o, i * 2),
+                other => panic!("Expected Output({}), got {:?}", i * 2, other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_poll_output_then_complete() {
+        let stage = once(|x: i32| x + 1);
+        let mut pollable = poll(stage);
+
+        // Send input which yields output first
+        match pollable.next(Poll::Input(10)) {
+            Step::Yielded(PollOutput::Output(11)) => {}
+            other => panic!("Expected Output(11), got {:?}", other),
+        }
+
+        // Poll indicates needs input
+        match pollable.next(Poll::Poll) {
+            Step::Yielded(PollOutput::NeedsInput) => {}
+            other => panic!("Expected NeedsInput, got {:?}", other),
+        }
+
+        // Send another input to complete
+        match pollable.next(Poll::Input(20)) {
+            Step::Complete(Ok(20)) => {}
+            other => panic!("Expected Complete(Ok(20)), got {:?}", other),
+        }
+    }
+
 }
