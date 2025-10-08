@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! # Cont: Composable Continuation-Based Programming
 //!
 //! Build composable computations that can yield intermediate values and be driven
