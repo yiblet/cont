@@ -139,6 +139,18 @@ where
     Chain(Some(l), r)
 }
 
+/// Create a chain from an InitSans stage and a continuation.
+///
+/// This is used when chaining an initial stage (that yields immediately) with a continuation.
+pub fn init_chain<I, O, L, R>(l: L, r: R) -> Chain<L, R>
+where
+    L: InitSans<I, O>,
+    R: Sans<I, O>,
+    L::Next: Sans<I, O, Return = I>,
+{
+    Chain(Some(l), r)
+}
+
 /// Chains two stages sequentially.
 ///
 /// Created via `chain()` or `first_chain()`. The first stage is dropped from memory
@@ -161,6 +173,31 @@ where
                 }
             },
             None => self.1.next(input),
+        }
+    }
+}
+
+impl<I, O, L, R> InitSans<I, O> for Chain<L, R>
+where
+    L: InitSans<I, O>,
+    R: Sans<I, O>,
+    L::Next: Sans<I, O, Return = I>,
+{
+    type Next = either::Either<Chain<L::Next, R>, R>;
+
+    fn init(mut self) -> Step<(O, Self::Next), R::Return> {
+        match self.0.take().expect("Chain left side must be Some").init() {
+            Step::Yielded((o, next)) => {
+                Step::Yielded((o, either::Either::Left(Chain(Some(next), self.1))))
+            }
+            Step::Complete(d) => {
+                match self.1.next(d) {
+                    Step::Yielded(o) => {
+                        Step::Yielded((o, either::Either::Right(self.1)))
+                    }
+                    Step::Complete(r) => Step::Complete(r),
+                }
+            }
         }
     }
 }

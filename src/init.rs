@@ -1,6 +1,6 @@
 use crate::{
     Sans, Step,
-    compose::{Chain, MapInput, MapReturn, MapYield, chain, map_input, map_return, map_yield},
+    compose::{Chain, MapInput, MapReturn, MapYield, init_chain, init_map_input, init_map_yield, init_map_return},
     build::{Once, Repeat, once, repeat},
 };
 
@@ -27,25 +27,17 @@ pub trait InitSans<I, O> {
     fn init(self) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Return>;
 
     /// Chain with a continuation.
-    #[allow(clippy::type_complexity)]
-    fn chain<R>(self, r: R) -> Step<(O, Chain<Self::Next, R>), <Self::Next as Sans<I, O>>::Return>
+    fn chain<R>(self, r: R) -> Chain<Self, R>
     where
         Self: Sized,
         Self::Next: Sans<I, O, Return = I>,
         R: Sans<I, O>,
     {
-        match self.init() {
-            Step::Yielded((o, next)) => Step::Yielded((o, chain(next, r))),
-            Step::Complete(d) => Step::Complete(d),
-        }
+        init_chain(self, r)
     }
 
     /// Chain with a function that executes once.
-    #[allow(clippy::type_complexity)]
-    fn chain_once<F>(
-        self,
-        f: F,
-    ) -> Step<(O, Chain<Self::Next, Once<F>>), <Self::Next as Sans<I, O>>::Return>
+    fn chain_once<F>(self, f: F) -> Chain<Self, Once<F>>
     where
         Self: Sized,
         Self::Next: Sans<I, O, Return = I>,
@@ -55,11 +47,7 @@ pub trait InitSans<I, O> {
     }
 
     /// Chain with a function that repeats indefinitely.
-    #[allow(clippy::type_complexity)]
-    fn chain_repeat<F>(
-        self,
-        f: F,
-    ) -> Step<(O, Chain<Self::Next, Repeat<F>>), <Self::Next as Sans<I, O>>::Return>
+    fn chain_repeat<F>(self, f: F) -> Chain<Self, Repeat<F>>
     where
         Self: Sized,
         Self::Next: Sans<I, O, Return = I>,
@@ -69,50 +57,30 @@ pub trait InitSans<I, O> {
     }
 
     /// Transform inputs before they reach the underlying continuation.
-    #[allow(clippy::type_complexity)]
-    fn map_input<I2, F>(
-        self,
-        f: F,
-    ) -> Step<(O, MapInput<Self::Next, F>), <Self::Next as Sans<I, O>>::Return>
+    fn map_input<I2, F>(self, f: F) -> MapInput<Self, F>
     where
         Self: Sized,
         F: FnMut(I2) -> I,
     {
-        match self.init() {
-            Step::Yielded((o, next)) => Step::Yielded((o, map_input(f, next))),
-            Step::Complete(d) => Step::Complete(d),
-        }
+        init_map_input(f, self)
     }
 
     /// Transform yielded values before returning them.
-    #[allow(clippy::type_complexity)]
-    fn map_yield<O2, F>(
-        self,
-        mut f: F,
-    ) -> Step<(O2, MapYield<Self::Next, F, I, O>), <Self::Next as Sans<I, O>>::Return>
+    fn map_yield<O2, F>(self, f: F) -> MapYield<Self, F, I, O>
     where
         Self: Sized,
         F: FnMut(O) -> O2,
     {
-        match self.init() {
-            Step::Yielded((o, next)) => {
-                let mapped_o = f(o);
-                Step::Yielded((mapped_o, map_yield(f, next)))
-            }
-            Step::Complete(d) => Step::Complete(d),
-        }
+        init_map_yield(f, self)
     }
 
     /// Transform the final result when completing.
-    fn map_done<D2, F>(self, mut f: F) -> Step<(O, MapReturn<Self::Next, F>), D2>
+    fn map_done<D2, F>(self, f: F) -> MapReturn<Self, F>
     where
         Self: Sized,
         F: FnMut(<Self::Next as Sans<I, O>>::Return) -> D2,
     {
-        match self.init() {
-            Step::Yielded((o, next)) => Step::Yielded((o, map_return(f, next))),
-            Step::Complete(d) => Step::Complete(f(d)),
-        }
+        init_map_return(f, self)
     }
 }
 
@@ -246,8 +214,8 @@ mod tests {
                 _ => panic!("unsupported op: {op}"),
             }
         })
-        .unwrap_yielded()
         .map_yield(|value: i64| format!("total={value}"))
+        .init()
         .unwrap_yielded();
 
         assert_eq!("total=0", initial_total);
@@ -263,10 +231,11 @@ mod tests {
         let finisher = once(|input: u32| input * 3);
 
         let first = initializer.chain(finisher);
-        let (first_value, mut stage) = (first
+        let (first_value, mut stage) = first
             .map_yield(|resume: u32| (resume + 7) as i32)
-            .map_done(|done: u32| done as i32 * 3))
-        .unwrap_yielded();
+            .map_done(|done: u32| done as i32 * 3)
+            .init()
+            .unwrap_yielded();
 
         assert_eq!(49, first_value);
         assert_eq!(18, stage.next(10).unwrap_yielded());
@@ -304,10 +273,9 @@ mod tests {
         let (first_value, mut rest) = initializer
             .chain(finisher)
             .map_input(|text: &str| text.parse::<u32>().expect("number"))
-            .unwrap_yielded()
             .map_yield(|value: u32| format!("value={value}"))
-            .unwrap_yielded()
             .map_done(|resume: u32| format!("done={resume}"))
+            .init()
             .unwrap_yielded();
         assert_eq!("value=5", first_value);
         assert_eq!("value=9", rest.next("7").unwrap_yielded());

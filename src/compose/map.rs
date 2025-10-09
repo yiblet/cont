@@ -1,4 +1,4 @@
-use crate::{Sans, step::Step};
+use crate::{InitSans, Sans, step::Step};
 
 /// Transforms input before passing it to the wrapped stage.
 ///
@@ -24,6 +24,17 @@ pub fn map_input<S, F>(f: F, stage: S) -> MapInput<S, F> {
     MapInput { f, stage }
 }
 
+/// Create a MapInput from an InitSans stage.
+///
+/// This is used when applying input transformation to a stage that yields immediately.
+pub fn init_map_input<I1, I2, O, S, F>(f: F, stage: S) -> MapInput<S, F>
+where
+    S: InitSans<I2, O>,
+    F: FnMut(I1) -> I2,
+{
+    MapInput { f, stage }
+}
+
 impl<I1, I2, O, S, F> Sans<I1, O> for MapInput<S, F>
 where
     S: Sans<I2, O>,
@@ -33,6 +44,23 @@ where
     fn next(&mut self, input: I1) -> Step<O, Self::Return> {
         let i2 = (self.f)(input);
         self.stage.next(i2)
+    }
+}
+
+impl<I1, I2, O, S, F> InitSans<I1, O> for MapInput<S, F>
+where
+    S: InitSans<I2, O>,
+    F: FnMut(I1) -> I2,
+{
+    type Next = MapInput<S::Next, F>;
+
+    fn init(self) -> Step<(O, Self::Next), <S::Next as Sans<I2, O>>::Return> {
+        match self.stage.init() {
+            Step::Yielded((o, next)) => {
+                Step::Yielded((o, MapInput { f: self.f, stage: next }))
+            }
+            Step::Complete(d) => Step::Complete(d),
+        }
     }
 }
 
@@ -65,6 +93,17 @@ where
     MapYield { f, stage, _phantom: std::marker::PhantomData }
 }
 
+/// Create a MapYield from an InitSans stage.
+///
+/// This is used when applying yield transformation to a stage that yields immediately.
+pub fn init_map_yield<I, O1, O2, S, F>(f: F, stage: S) -> MapYield<S, F, I, O1>
+where
+    S: InitSans<I, O1>,
+    F: FnMut(O1) -> O2,
+{
+    MapYield { f, stage, _phantom: std::marker::PhantomData }
+}
+
 impl<I, O1, O2, S, F> Sans<I, O2> for MapYield<S, F, I, O1>
 where
     S: Sans<I, O1>,
@@ -75,6 +114,25 @@ where
         match self.stage.next(input) {
             Step::Yielded(o1) => Step::Yielded((self.f)(o1)),
             Step::Complete(a) => Step::Complete(a),
+        }
+    }
+}
+
+impl<I, O1, O2, S, F> InitSans<I, O2> for MapYield<S, F, I, O1>
+where
+    S: InitSans<I, O1>,
+    F: FnMut(O1) -> O2,
+{
+    type Next = MapYield<S::Next, F, I, O1>;
+
+    fn init(self) -> Step<(O2, Self::Next), <S::Next as Sans<I, O1>>::Return> {
+        match self.stage.init() {
+            Step::Yielded((o1, next)) => {
+                let mut f = self.f;
+                let o2 = f(o1);
+                Step::Yielded((o2, MapYield { f, stage: next, _phantom: std::marker::PhantomData }))
+            }
+            Step::Complete(d) => Step::Complete(d),
         }
     }
 }
@@ -106,6 +164,18 @@ pub fn map_return<S, F>(f: F, stage: S) -> MapReturn<S, F> {
     MapReturn { f, stage }
 }
 
+/// Create a MapReturn from an InitSans stage.
+///
+/// This is used when applying return transformation to a stage that yields immediately.
+pub fn init_map_return<I, O, D1, D2, S, F>(f: F, stage: S) -> MapReturn<S, F>
+where
+    S: InitSans<I, O>,
+    S::Next: Sans<I, O, Return = D1>,
+    F: FnMut(D1) -> D2,
+{
+    MapReturn { f, stage }
+}
+
 impl<I, O, D1, D2, S, F> Sans<I, O> for MapReturn<S, F>
 where
     S: Sans<I, O, Return = D1>,
@@ -116,6 +186,27 @@ where
         match self.stage.next(input) {
             Step::Yielded(o) => Step::Yielded(o),
             Step::Complete(r1) => Step::Complete((self.f)(r1)),
+        }
+    }
+}
+
+impl<I, O, D1, D2, S, F> InitSans<I, O> for MapReturn<S, F>
+where
+    S: InitSans<I, O>,
+    S::Next: Sans<I, O, Return = D1>,
+    F: FnMut(D1) -> D2,
+{
+    type Next = MapReturn<S::Next, F>;
+
+    fn init(self) -> Step<(O, Self::Next), D2> {
+        match self.stage.init() {
+            Step::Yielded((o, next)) => {
+                Step::Yielded((o, MapReturn { f: self.f, stage: next }))
+            }
+            Step::Complete(d1) => {
+                let mut f = self.f;
+                Step::Complete(f(d1))
+            }
         }
     }
 }
