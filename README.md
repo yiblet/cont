@@ -308,12 +308,6 @@ While these libraries focus on different aspects (parsing, stackful coroutines, 
 
 - TBD
 
-## Version
-
-Current version: **0.1.0-alpha.2**
-
-This is an alpha release. The API may change in future versions based on feedback and real-world usage.
-
 ## License
 
 See the LICENSE file in the repository for licensing information.
