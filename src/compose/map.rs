@@ -9,6 +9,17 @@ pub struct MapInput<S, F> {
 }
 
 /// Create a continuation that transforms input before passing it to the wrapped stage.
+///
+/// # Examples
+///
+/// ```
+/// use cont::prelude::*;
+///
+/// let stage = repeat(|x: i32| x * 2);
+/// let mut mapped = map_input(|s: &str| s.parse::<i32>().unwrap(), stage);
+///
+/// assert_eq!(mapped.next("5").unwrap_yielded(), 10);
+/// ```
 pub fn map_input<S, F>(f: F, stage: S) -> MapInput<S, F> {
     MapInput { f, stage }
 }
@@ -35,6 +46,17 @@ pub struct MapYield<S, F, I, O1> {
 }
 
 /// Create a continuation that transforms yielded values from the wrapped stage.
+///
+/// # Examples
+///
+/// ```
+/// use cont::prelude::*;
+///
+/// let stage = repeat(|x: i32| x * 2);
+/// let mut mapped = map_yield(|y: i32| y.to_string(), stage);
+///
+/// assert_eq!(mapped.next(5).unwrap_yielded(), "10");
+/// ```
 pub fn map_yield<I, O1, O2, S, F>(f: F, stage: S) -> MapYield<S, F, I, O1>
 where
     S: Sans<I, O1>,
@@ -66,6 +88,20 @@ pub struct MapReturn<S, F> {
 }
 
 /// Create a continuation that transforms the final result from the wrapped stage.
+///
+/// # Examples
+///
+/// ```
+/// use cont::prelude::*;
+///
+/// let stage = once(|x: i32| x + 5);
+/// let mut mapped = map_return(|r: i32| r * 10, stage);
+///
+/// // Yield is not transformed
+/// assert_eq!(mapped.next(10).unwrap_yielded(), 15);
+/// // Return is transformed: 20 * 10 = 200
+/// assert_eq!(mapped.next(20).unwrap_complete(), 200);
+/// ```
 pub fn map_return<S, F>(f: F, stage: S) -> MapReturn<S, F> {
     MapReturn { f, stage }
 }
@@ -119,5 +155,154 @@ mod tests {
         assert_eq!("total=5", stage.next("add 5").unwrap_yielded());
         assert_eq!("total=2", stage.next("sub 3").unwrap_yielded());
         assert_eq!("total=7", stage.next("add 5").unwrap_yielded());
+    }
+
+    #[test]
+    fn test_map_input_basic() {
+        use crate::build::repeat;
+        let stage = repeat(|x: i32| x * 2);
+        let mut mapped = map_input(|s: &str| s.parse::<i32>().unwrap(), stage);
+
+        assert_eq!(mapped.next("5").unwrap_yielded(), 10);
+        assert_eq!(mapped.next("7").unwrap_yielded(), 14);
+        assert_eq!(mapped.next("10").unwrap_yielded(), 20);
+    }
+
+    #[test]
+    fn test_map_input_with_once() {
+        use crate::build::once;
+        let stage = once(|x: i32| x + 100);
+        let mut mapped = map_input(|s: String| s.len() as i32, stage);
+
+        // First input: "hello".len() = 5, yields 5 + 100 = 105
+        assert_eq!(mapped.next("hello".to_string()).unwrap_yielded(), 105);
+        // Second input: "world".len() = 5, completes with 5
+        assert_eq!(mapped.next("world".to_string()).unwrap_complete(), 5);
+    }
+
+    #[test]
+    fn test_map_input_preserves_return() {
+        use crate::build::once;
+        let stage = once(|x: i32| x * 2);
+        let mut mapped = map_input(|x: i32| x + 1, stage);
+
+        // Input 5 -> 6, yields 12
+        mapped.next(5).unwrap_yielded();
+        // Input 10 -> 11, completes with 11
+        assert_eq!(mapped.next(10).unwrap_complete(), 11);
+    }
+
+    #[test]
+    fn test_map_yield_basic() {
+        use crate::build::repeat;
+        let stage = repeat(|x: i32| x * 2);
+        let mut mapped = map_yield(|y: i32| y.to_string(), stage);
+
+        assert_eq!(mapped.next(5).unwrap_yielded(), "10");
+        assert_eq!(mapped.next(7).unwrap_yielded(), "14");
+        assert_eq!(mapped.next(100).unwrap_yielded(), "200");
+    }
+
+    #[test]
+    fn test_map_yield_with_once() {
+        use crate::build::once;
+        let stage = once(|x: i32| x + 10);
+        let mut mapped = map_yield(|y: i32| format!("result={}", y), stage);
+
+        assert_eq!(mapped.next(5).unwrap_yielded(), "result=15");
+        assert_eq!(mapped.next(20).unwrap_complete(), 20);
+    }
+
+    #[test]
+    fn test_map_yield_preserves_return() {
+        use crate::build::once;
+        let stage = once(|x: i32| x * 2);
+        let mut mapped = map_yield(|y: i32| y as f64, stage);
+
+        // Yield is transformed to f64
+        assert_eq!(mapped.next(5).unwrap_yielded(), 10.0);
+        // Return is NOT transformed (still i32)
+        assert_eq!(mapped.next(7).unwrap_complete(), 7);
+    }
+
+    #[test]
+    fn test_map_return_basic() {
+        use crate::build::once;
+        let stage = once(|x: i32| x + 5);
+        let mut mapped = map_return(|r: i32| r * 10, stage);
+
+        // Yield is not transformed
+        assert_eq!(mapped.next(10).unwrap_yielded(), 15);
+        // Return is transformed: 20 * 10 = 200
+        assert_eq!(mapped.next(20).unwrap_complete(), 200);
+    }
+
+    #[test]
+    fn test_map_return_with_repeat() {
+        use crate::build::repeat;
+        // repeat never completes, so this just demonstrates the type change
+        let stage = repeat(|x: i32| x + 1);
+        let _mapped = map_return(|r: i32| r.to_string(), stage);
+        // We can't test completion, but we can verify it compiles with transformed return type
+    }
+
+    #[test]
+    fn test_map_return_yield_passthrough() {
+        use crate::build::once;
+        let stage = once(|x: i32| x * 2);
+        let mut mapped = map_return(|r: i32| format!("done:{}", r), stage);
+
+        // First: yields 5 * 2 = 10
+        assert_eq!(mapped.next(5).unwrap_yielded(), 10);
+        // Second: once completes with 7, return is transformed
+        assert_eq!(mapped.next(7).unwrap_complete(), "done:7");
+    }
+
+    #[test]
+    fn test_map_return_type_conversion() {
+        use crate::build::once;
+        let stage = once(|x: i32| x + 1);
+        let mut mapped = map_return(|r: i32| (r as f64, r * 2), stage);
+
+        mapped.next(5).unwrap_yielded(); // 6
+        // Return is transformed to tuple
+        assert_eq!(mapped.next(10).unwrap_complete(), (10.0, 20));
+    }
+
+    #[test]
+    fn test_all_three_maps_combined() {
+        use crate::build::once;
+        // Input: &str -> parse to i32
+        // Yield: i32 -> format as string
+        // Return: i32 -> convert to f64
+        let stage = once(|x: i32| x * 2);
+        let mut mapped = map_return(
+            |r: i32| r as f64,
+            map_yield(
+                |y: i32| format!("yielded:{}", y),
+                map_input(|s: &str| s.parse::<i32>().unwrap(), stage),
+            ),
+        );
+
+        // Input "5" -> 5, yields 10 -> "yielded:10"
+        assert_eq!(mapped.next("5").unwrap_yielded(), "yielded:10");
+        // Input "7" -> 7, completes with 7 -> 7.0
+        assert_eq!(mapped.next("7").unwrap_complete(), 7.0);
+    }
+
+    #[test]
+    fn test_map_input_multiple_transformations() {
+        use crate::build::repeat;
+        let stage = repeat(|x: i32| x + 1);
+        // Double map_input: String -> usize (len) -> i32
+        let mut mapped = map_input(
+            |s: String| s.len(),
+            map_input(|n: usize| n as i32, stage),
+        );
+
+        // Input "hello" -> len=5 -> 5 + 1 = 6
+        assert_eq!(mapped.next("hello".to_string()).unwrap_yielded(), 6);
+        // Input "a" -> len=1 -> 1 + 1 = 2
+        assert_eq!(mapped.next("a".to_string()).unwrap_yielded(), 2);
     }
 }

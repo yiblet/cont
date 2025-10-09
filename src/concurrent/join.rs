@@ -1,6 +1,34 @@
 use crate::{InitSans, Sans, Step};
-use super::poll::{poll, init_poll, Poll, PollOutput, PollError, Pollable};
+use crate::poll::{poll, init_poll, Poll, PollOutput, PollError, Pollable};
 
+/// Create a [`Join`] from an array of [`InitSans`] stages.
+///
+/// Each stage is wrapped in a [`Pollable`] using [`init_poll`], allowing them to be
+/// polled concurrently. See [`Join`] for details on how concurrent execution works.
+///
+/// # Examples
+///
+/// ```
+/// use cont::prelude::*;
+/// use cont::poll::{Poll, PollOutput};
+/// use cont::concurrent::{init_join, JoinEnvelope};
+///
+/// // Create two stages with initial outputs
+/// fn add_one(x: i32) -> i32 { x + 1 }
+/// let f = add_one as fn(i32) -> i32;
+/// let stage1 = (100, repeat(f));
+/// let stage2 = (200, repeat(f));
+///
+/// let mut joined = init_join([stage1, stage2]);
+///
+/// // Poll to get initial outputs
+/// match joined.next(Poll::Poll) {
+///     Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {
+///         assert!(val == 100 || val == 200);
+///     }
+///     _ => panic!("Expected output"),
+/// }
+/// ```
 pub fn init_join<const N: usize, I, O, S, T>(rest: [T; N]) -> Join<N, S, O, S::Return>
 where
     T: InitSans<I, O, Next = S>,
@@ -16,6 +44,30 @@ where
     }
 }
 
+/// Create a [`Join`] from an array of [`Sans`] stages.
+///
+/// Wraps each stage in a [`Pollable`] for concurrent execution. The resulting [`Join`]
+/// can be polled to get outputs from any ready stage, or sent inputs directed to specific stages.
+///
+/// # Examples
+///
+/// ```
+/// use cont::prelude::*;
+/// use cont::poll::{Poll, PollOutput};
+/// use cont::concurrent::{join, JoinEnvelope};
+///
+/// fn add_one(x: i32) -> i32 { x + 1 }
+/// let stage1 = repeat(add_one);
+/// let stage2 = repeat(add_one);
+///
+/// let mut joined = join([stage1, stage2]);
+///
+/// // Send input to first stage
+/// match joined.next(Poll::Input(JoinEnvelope(0, 10))) {
+///     Step::Yielded(PollOutput::Output(JoinEnvelope(0, 11))) => {}
+///     _ => panic!("Expected output from stage 0"),
+/// }
+/// ```
 pub fn join<const N: usize, I, O, S>(rest: [S; N]) -> Join<N, S, O, S::Return>
 where
     S: Sans<I, O>,
@@ -28,6 +80,9 @@ where
     }
 }
 
+/// Create a [`JoinVec`] from a vector of [`Sans`] stages.
+///
+/// Like [`join`] but accepts a dynamic number of stages at runtime.
 pub fn join_vec<I, O, S>(sans: Vec<S>) -> JoinVec<S, O, S::Return>
 where
     S: Sans<I, O>,
@@ -41,6 +96,9 @@ where
     }
 }
 
+/// Create a [`JoinVec`] from a vector of [`InitSans`] stages.
+///
+/// Like [`init_join`] but accepts a dynamic number of stages at runtime.
 pub fn init_join_vec<I, O, S, T>(inits: Vec<T>) -> JoinVec<S, O, S::Return>
 where
     T: InitSans<I, O, Next = S>,
@@ -55,6 +113,15 @@ where
     }
 }
 
+/// Runs multiple continuations concurrently, allowing them to be polled and fed inputs independently.
+///
+/// `Join` coordinates execution of `N` stages, each wrapped in a [`Pollable`]. Inputs and outputs
+/// are tagged with a [`JoinEnvelope`] containing the stage index.
+///
+/// When polled (`Poll::Poll`), it uses round-robin scheduling to check each stage for available
+/// output. Inputs (`Poll::Input(JoinEnvelope(index, value))`) are routed to the specified stage.
+///
+/// The join completes when all stages complete, returning an array of their return values.
 pub struct Join<const N: usize, S, O, R> {
     pollables: [Pollable<S, O, R>; N],
     returns: [Option<R>; N],
@@ -62,7 +129,9 @@ pub struct Join<const N: usize, S, O, R> {
     complete: usize,
 }
 
-// Vec-based version for dynamic number of Sans
+/// Vec-based version of [`Join`] for dynamic number of stages.
+///
+/// Like [`Join`] but uses a `Vec` to store stages, allowing the number to be determined at runtime.
 pub struct JoinVec<S, O, R> {
     pollables: Vec<Pollable<S, O, R>>,
     returns: Vec<Option<R>>,
@@ -70,8 +139,10 @@ pub struct JoinVec<S, O, R> {
     complete: usize,
 }
 
+/// Errors that can occur during join execution.
 #[derive(Debug)]
 pub enum JoinError {
+    /// A pollable stage failed with the given index and error.
     PollableFailed(usize, PollError),
 }
 
@@ -87,6 +158,11 @@ impl std::fmt::Display for JoinError {
 
 impl std::error::Error for JoinError {}
 
+/// Wraps values with a stage index for routing in [`Join`] operations.
+///
+/// The first field is the stage index, the second is the wrapped value.
+///
+/// Implements `Deref` to access the inner value conveniently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JoinEnvelope<T>(pub usize, pub T);
 

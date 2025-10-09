@@ -1,3 +1,6 @@
+//! Polling for both [`Sans`] and [`InitSans`]
+//!
+//! This module provides a universal adapter for polling both [`Sans`] and [`InitSans`].
 use crate::{InitSans, Sans, Step};
 
 enum PollState<S, O, R> {
@@ -38,25 +41,51 @@ impl<S, O, R> PollState<S, O, R> {
     }
 }
 
+/// A continuation wrapper that allows polling for outputs and asynchronously providing inputs.
+///
+/// Created via [`poll`] or [`init_poll`]. Wraps a [`Sans`] stage to enable explicit
+/// control over when inputs are provided and outputs are retrieved.
+///
+/// # Universal Adapter Property
+///
+/// `Pollable` uniquely implements both [`Sans`] and [`InitSans`] for the same input/output types,
+/// making it a universal adapter. This allows you to:
+/// - Wrap a [`Sans`] to use where an [`InitSans`] is required
+/// - Wrap an [`InitSans`] to use where a [`Sans`] is required
+///
+/// This adapter capability is useful beyond concurrent execution - anywhere you need to bridge
+/// between APIs expecting different trait bounds.
 pub struct Pollable<S, O, R> {
     state: PollState<S, O, R>,
 }
 
+/// Input type for [`Pollable`] stages.
+///
+/// Either polls for available output or provides an input value.
 pub enum Poll<I> {
+    /// Check if there's output available without providing input.
     Poll,
+    /// Provide an input value to the stage.
     Input(I),
 }
 
+/// Output from a [`Pollable`] stage.
 #[derive(Debug)]
 pub enum PollOutput<I, O> {
+    /// Stage produced an output value.
     Output(O),
+    /// Stage completed (should not occur in Yielded, only in Complete).
     Complete,
+    /// Stage needs input before it can produce output.
     NeedsInput,
+    /// Input was provided but stage wasn't ready for it; poll first.
     NeedsPoll(I),
 }
 
+/// Errors from [`Pollable`] operations.
 #[derive(Debug)]
 pub enum PollError {
+    /// Attempted to poll or provide input after stage completed.
     AlreadyComplete,
 }
 
@@ -70,7 +99,35 @@ impl std::fmt::Display for PollError {
 
 impl std::error::Error for PollError {}
 
-/// Create a continuation that polls the wrapped stage for input.
+/// Wrap a [`Sans`] stage in a [`Pollable`] for explicit input/output control.
+///
+/// The resulting [`Pollable`] can be polled with [`Poll::Poll`] to check for available
+/// output, or sent inputs with [`Poll::Input`].
+///
+/// **Note:** Because [`Pollable`] implements both [`Sans`] and [`InitSans`], this also serves
+/// as an adapter to use a [`Sans`] where an [`InitSans`] is required.
+///
+/// # Examples
+///
+/// ```
+/// use cont::prelude::*;
+/// use cont::poll::{Poll, PollOutput};
+///
+/// let stage = repeat(|x: i32| x + 1);
+/// let mut pollable = poll(stage);
+///
+/// // Poll first - stage needs input
+/// match pollable.next(Poll::Poll) {
+///     Step::Yielded(PollOutput::NeedsInput) => {}
+///     _ => panic!("Expected NeedsInput"),
+/// }
+///
+/// // Provide input
+/// match pollable.next(Poll::Input(5)) {
+///     Step::Yielded(PollOutput::Output(6)) => {}
+///     _ => panic!("Expected Output(6)"),
+/// }
+/// ```
 pub fn poll<I, S, O, R>(stage: S) -> Pollable<S, O, R>
 where
     S: Sans<I, O>,
@@ -80,6 +137,13 @@ where
     }
 }
 
+/// Wrap an [`InitSans`] stage in a [`Pollable`], handling the initial output.
+///
+/// If the stage has an initial output, it will be available on the first poll.
+/// If it completes immediately, the [`Pollable`] will return that completion.
+///
+/// **Note:** Because [`Pollable`] implements both [`Sans`] and [`InitSans`], this also serves
+/// as an adapter to use an [`InitSans`] where a [`Sans`] is required.
 pub fn init_poll<I, S, O, T>(init: T) -> Pollable<S, O, S::Return>
 where
     S: Sans<I, O>,
