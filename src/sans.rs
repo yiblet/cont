@@ -1,7 +1,7 @@
-//! Core trait for stateful continuations.
+//! Core trait for stateful coroutines.
 //!
 //! This module defines the [`Sans`] trait, the fundamental building block for
-//! continuation-based programming in this library. A [`Sans`] represents a stateful
+//! coroutine-based programming in this library. A [`Sans`] represents a stateful
 //! computation that can process input values and yield intermediate results.
 //!
 //! # The Sans Trait
@@ -14,9 +14,9 @@
 //! # Examples
 //!
 //! ```rust
-//! use cont::prelude::*;
+//! use sans::prelude::*;
 //!
-//! // Create a continuation that processes one input then completes
+//! // Create a coroutine that processes one input then completes
 //! let mut stage = once(|x: i32| x * 2);
 //! assert_eq!(stage.next(5).unwrap_yielded(), 10);
 //! assert_eq!(stage.next(3).unwrap_complete(), 3);
@@ -42,7 +42,7 @@ use crate::{
 /// This allows building composable, resumable computations.
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let mut stage = once(|x: i32| x * 2);
 /// assert_eq!(stage.next(5).unwrap_yielded(), 10);
@@ -55,13 +55,13 @@ pub trait Sans<I, O> {
     /// Process input, returning `Yield` to continue or `Return` to complete.
     fn next(&mut self, input: I) -> Step<O, Self::Return>;
 
-    /// Chain with a continuation created from this stage's return value.
+    /// Chain with a coroutine created from this stage's return value.
     ///
     /// The function `f` receives the return value and must produce an [`InitSans`].
     /// Use [`init()`](crate::build::init) to wrap a `Sans`:
     ///
     /// ```rust
-    /// use cont::prelude::*;
+    /// use sans::prelude::*;
     ///
     /// let mut stage = once(|x: i32| x * 2)
     ///     .and_then(|val| init(val, repeat(move |x| x + val)));
@@ -82,7 +82,7 @@ pub trait Sans<I, O> {
         Box::new(self)
     }
 
-    /// Chain with another continuation.
+    /// Chain with another coroutine.
     fn chain<R>(self, r: R) -> Chain<Self, R>
     where
         Self: Sized + Sans<I, O, Return = I>,
@@ -109,7 +109,7 @@ pub trait Sans<I, O> {
         chain(self, repeat(f))
     }
 
-    /// Transform inputs before they reach this continuation.
+    /// Transform inputs before they reach this coroutine.
     fn map_input<I2, F>(self, f: F) -> MapInput<Self, F>
     where
         Self: Sized,

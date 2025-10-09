@@ -1,6 +1,6 @@
 //! Commonly used imports
 //!
-//! Use `use cont::prelude::*;` for quick access to the most common types and functions.
+//! Use `use sans::prelude::*;` for quick access to the most common types and functions.
 
 // Core types
 pub use crate::{Step, Sans, InitSans};

@@ -1,13 +1,13 @@
-//! The result type for continuation steps.
+//! The result type for coroutine steps.
 //!
 //! This module defines the [`Step`] enum, which represents the outcome of executing
-//! one step of a continuation. It's analogous to how `Option` represents optional values
+//! one step of a coroutine. It's analogous to how `Option` represents optional values
 //! or `Result` represents fallible operations.
 //!
 //! # Examples
 //!
 //! ```rust
-//! use cont::Step;
+//! use sans::Step;
 //!
 //! // A computation that continues
 //! let continuing: Step<i32, String> = Step::Yielded(42);
@@ -18,13 +18,13 @@
 
 /// Result of a computation step, either yielding a value to continue or completing with a final value.
 ///
-/// `Step` is the return type for continuation computations, similar to how `Option` represents
+/// `Step` is the return type for coroutine computations, similar to how `Option` represents
 /// optional values and `Result` represents fallible operations.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use cont::Step;
+/// use sans::Step;
 ///
 /// let continuing: Step<i32, String> = Step::Yielded(42);
 /// let completed: Step<i32, String> = Step::Complete("finished".to_string());
@@ -47,7 +47,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert!(x.is_yielded());
@@ -65,7 +65,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// assert!(x.is_complete());
@@ -86,7 +86,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert_eq!(x.yielded_value(), Some(42));
@@ -110,7 +110,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// assert_eq!(x.complete_value(), Some("complete"));
@@ -131,7 +131,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, i32> = Step::Complete(5);
     /// assert_eq!(x.map_complete(|v| v * 2), Step::Complete(10));
@@ -155,7 +155,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert_eq!(x.map_yielded(|v| v * 2), Step::Yielded(84));
@@ -179,7 +179,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, i32> = Step::Yielded(42);
     /// assert_eq!(x.map(|y| y * 2, |d| d + 1), Step::Yielded(84));
@@ -204,7 +204,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert_eq!(x.yielded_or(0), 42);
@@ -225,7 +225,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert_eq!(x.yielded_or_else(|| 0), 42);
@@ -249,7 +249,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// assert_eq!(x.complete_or("default"), "complete");
@@ -270,7 +270,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// assert_eq!(x.complete_or_else(|| "default"), "complete");
@@ -294,7 +294,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, String> = Step::Yielded(42);
     /// assert_eq!(x.as_ref(), Step::Yielded(&42));
@@ -315,7 +315,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let mut x: Step<i32, String> = Step::Yielded(42);
     /// if let Step::Yielded(y) = x.as_mut() {
@@ -336,7 +336,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert_eq!(x.flip(), Step::Complete(42));
@@ -357,7 +357,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert!(x.contains_yielded(&42));
@@ -379,7 +379,7 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// assert!(x.contains_complete(&"complete"));
@@ -405,14 +405,14 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert_eq!(x.expect_yielded("was complete"), 42);
     /// ```
     ///
     /// ```should_panic
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// x.expect_yielded("the world is ending"); // panics with "the world is ending"
@@ -434,14 +434,14 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// assert_eq!(x.expect_complete("was yielding"), "complete");
     /// ```
     ///
     /// ```should_panic
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// x.expect_complete("the world is ending"); // panics with "the world is ending"
@@ -463,14 +463,14 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// assert_eq!(x.unwrap_yielded(), 42);
     /// ```
     ///
     /// ```should_panic
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// x.unwrap_yielded(); // panics
@@ -492,14 +492,14 @@ impl<Y, D> Step<Y, D> {
     /// # Examples
     ///
     /// ```rust
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Complete("complete");
     /// assert_eq!(x.unwrap_complete(), "complete");
     /// ```
     ///
     /// ```should_panic
-    /// use cont::Step;
+    /// use sans::Step;
     ///
     /// let x: Step<i32, &str> = Step::Yielded(42);
     /// x.unwrap_complete(); // panics

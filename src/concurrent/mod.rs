@@ -1,4 +1,4 @@
-//! Run multiple continuations concurrently
+//! Run multiple coroutines concurrently
 //!
 //! This module provides joining operations for concurrent execution.
 

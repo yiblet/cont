@@ -1,7 +1,7 @@
-//! Result combinators for error handling in continuations.
+//! Result combinators for error handling in coroutines.
 //!
 //! This module provides adapters and extension traits for working with [`Result`] types
-//! in continuation pipelines, enabling composable error handling patterns.
+//! in coroutine pipelines, enabling composable error handling patterns.
 //!
 //! # Core Combinators
 //!
@@ -19,8 +19,8 @@
 //! # Examples
 //!
 //! ```
-//! use cont::prelude::*;
-//! use cont::result::{short_circuit, TrySans};
+//! use sans::prelude::*;
+//! use sans::result::{short_circuit, TrySans};
 //!
 //! // Short-circuit on errors
 //! let stage = repeat(|x: i32| {
@@ -43,13 +43,13 @@ pub struct ShortCircuit<S, E> {
     _phantom: std::marker::PhantomData<E>,
 }
 
-/// Create a continuation that short-circuits on the first yielded `Err`.
+/// Create a coroutine that short-circuits on the first yielded `Err`.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::result::short_circuit;
+/// use sans::prelude::*;
+/// use sans::result::short_circuit;
 ///
 /// let stage = repeat(|x: i32| {
 ///     if x < 0 { Err("negative") } else { Ok(x * 2) }
@@ -128,15 +128,15 @@ enum OkMapState<S, T, F> {
     OnSecond(T),
 }
 
-/// Create a continuation that maps `Ok` return values through a function.
+/// Create a coroutine that maps `Ok` return values through a function.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::result::ok_map;
-/// use cont::build::from_fn;
-/// use cont::Step;
+/// use sans::prelude::*;
+/// use sans::result::ok_map;
+/// use sans::build::from_fn;
+/// use sans::Step;
 ///
 /// let mut called = false;
 /// let stage = from_fn(move |x: i32| -> Step<i32, Result<i32, String>> {
@@ -273,15 +273,15 @@ enum OkAndThenState<S, T, F> {
     OnSecond(T),
 }
 
-/// Create a continuation that chains `Ok` values through a fallible function.
+/// Create a coroutine that chains `Ok` values through a fallible function.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::result::ok_and_then;
-/// use cont::build::from_fn;
-/// use cont::Step;
+/// use sans::prelude::*;
+/// use sans::result::ok_and_then;
+/// use sans::build::from_fn;
+/// use sans::Step;
 ///
 /// let mut first_called = false;
 /// let stage = from_fn(move |x: i32| -> Step<Result<i32, String>, Result<i32, String>> {
@@ -423,15 +423,15 @@ pub struct OkChain<S, R> {
     next: R,
 }
 
-/// Create a continuation that chains to another stage on `Ok`.
+/// Create a coroutine that chains to another stage on `Ok`.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::result::ok_chain;
-/// use cont::build::from_fn;
-/// use cont::Step;
+/// use sans::prelude::*;
+/// use sans::result::ok_chain;
+/// use sans::build::from_fn;
+/// use sans::Step;
 ///
 /// let mut called = false;
 /// let first = from_fn(move |x: i32| -> Step<i32, Result<i32, String>> {
@@ -552,15 +552,15 @@ pub struct Flatten<S> {
     stage: S,
 }
 
-/// Create a continuation that flattens nested `Result` types.
+/// Create a coroutine that flattens nested `Result` types.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::result::flatten;
-/// use cont::build::from_fn;
-/// use cont::Step;
+/// use sans::prelude::*;
+/// use sans::result::flatten;
+/// use sans::build::from_fn;
+/// use sans::Step;
 ///
 /// let mut called = false;
 /// let stage = from_fn(move |x: i32| -> Step<Result<Result<i32, String>, String>, Result<Result<i32, String>, String>> {

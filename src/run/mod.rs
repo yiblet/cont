@@ -1,9 +1,9 @@
-//! Running continuations to completion
+//! Running coroutines to completion
 //!
-//! Functions for driving continuations to completion.
+//! Functions for driving coroutines to completion.
 //!
 //! This module provides both synchronous and asynchronous execution functions,
-//! plus utilities for working with continuations that need initial input.
+//! plus utilities for working with coroutines that need initial input.
 
 use crate::init::InitSans;
 use crate::sans::Sans;
@@ -13,7 +13,7 @@ use std::future::Future;
 /// Drive an `InitSans` stage to completion with synchronous responses.
 ///
 /// Executes the initial `InitSans` stage and continues driving the resulting
-/// continuation until completion, calling the responder for each yield.
+/// coroutine until completion, calling the responder for each yield.
 pub fn handle_init_sync<S, I, O, R>(stage: S, mut responder: R) -> <S::Next as Sans<I, O>>::Return
 where
     S: InitSans<I, O>,
@@ -36,9 +36,9 @@ where
     }
 }
 
-/// Drive a continuation to completion with synchronous responses.
+/// Drive a coroutine to completion with synchronous responses.
 ///
-/// Takes an existing continuation with initial input and drives it to completion.
+/// Takes an existing coroutine with initial input and drives it to completion.
 pub fn handle_cont_sync<C, I, O, R>(mut stage: C, mut input: I, mut responder: R) -> C::Return
 where
     C: Sans<I, O>,
@@ -106,12 +106,12 @@ where
     }
 }
 
-/// Main function for executing continuation pipelines.
+/// Main function for executing coroutine pipelines.
 ///
 /// This is the most commonly used function - a shorthand for `handle_init_sync`.
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let pipeline = init_once(10, |x: i32| x * 2).chain(once(|x: i32| x + 1));
 /// let result = handle(pipeline, |output| output + 5);

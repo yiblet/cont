@@ -1,6 +1,6 @@
-//! Joining multiple continuations for concurrent execution.
+//! Joining multiple coroutines for concurrent execution.
 //!
-//! This module provides the [`Join`] combinator for running multiple continuations
+//! This module provides the [`Join`] combinator for running multiple coroutines
 //! concurrently, polling them for outputs and directing inputs to specific stages.
 
 use crate::{InitSans, Sans, Step};
@@ -14,9 +14,9 @@ use crate::poll::{poll, init_poll, Poll, PollOutput, PollError, Pollable};
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::poll::{Poll, PollOutput};
-/// use cont::concurrent::{init_join, JoinEnvelope};
+/// use sans::prelude::*;
+/// use sans::poll::{Poll, PollOutput};
+/// use sans::concurrent::{init_join, JoinEnvelope};
 ///
 /// // Create two stages with initial outputs
 /// fn add_one(x: i32) -> i32 { x + 1 }
@@ -57,9 +57,9 @@ where
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::poll::{Poll, PollOutput};
-/// use cont::concurrent::{join, JoinEnvelope};
+/// use sans::prelude::*;
+/// use sans::poll::{Poll, PollOutput};
+/// use sans::concurrent::{join, JoinEnvelope};
 ///
 /// fn add_one(x: i32) -> i32 { x + 1 }
 /// let stage1 = repeat(add_one);
@@ -120,7 +120,7 @@ where
     }
 }
 
-/// Runs multiple continuations concurrently, allowing them to be polled and fed inputs independently.
+/// Runs multiple coroutines concurrently, allowing them to be polled and fed inputs independently.
 ///
 /// `Join` coordinates execution of `N` stages, each wrapped in a [`Pollable`]. Inputs and outputs
 /// are tagged with a [`JoinEnvelope`] containing the stage index.

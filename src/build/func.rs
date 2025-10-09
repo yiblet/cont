@@ -1,6 +1,6 @@
-//! Function-based continuation builders.
+//! Function-based coroutine builders.
 //!
-//! This module provides basic building blocks for creating continuations from functions.
+//! This module provides basic building blocks for creating coroutines from functions.
 
 use crate::{Sans, step::Step};
 
@@ -16,10 +16,10 @@ where
     }
 }
 
-/// Create a continuation from a closure.
+/// Create a coroutine from a closure.
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let mut toggle = from_fn(|x: bool| {
 ///     if x { Step::Yielded(!x) } else { Step::Complete(x) }
@@ -46,10 +46,10 @@ where
     }
 }
 
-/// Create a continuation that applies a function indefinitely.
+/// Create a coroutine that applies a function indefinitely.
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let mut doubler = repeat(|x: i32| x * 2);
 /// assert_eq!(doubler.next(5).unwrap_yielded(), 10);
@@ -65,10 +65,10 @@ pub fn repeat<I, O, F: FnMut(I) -> O>(f: F) -> Repeat<F> {
 /// First call yields the function result, subsequent calls return `Done(input)`.
 pub struct Once<F>(Option<F>);
 
-/// Create a continuation that applies a function once.
+/// Create a coroutine that applies a function once.
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let mut stage = once(|x: i32| x + 10);
 /// assert_eq!(stage.next(5).unwrap_yielded(), 15);

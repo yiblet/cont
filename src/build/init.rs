@@ -1,6 +1,6 @@
-//! Builders for continuations with initial output.
+//! Builders for coroutines with initial output.
 //!
-//! This module provides functions for creating [`InitSans`](crate::InitSans) continuations
+//! This module provides functions for creating [`InitSans`](crate::InitSans) coroutines
 //! that yield an initial value before processing input.
 
 use crate::{Sans, Step};
@@ -15,7 +15,7 @@ use super::func::{FromFn, Once, Repeat};
 /// # Examples
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// // Using init() with and_then
 /// let mut stage = once(|x: i32| x * 2)
@@ -46,10 +46,10 @@ pub fn init_repeat<I, O, F: FnMut(I) -> O>(o: O, f: F) -> (O, Repeat<F>) {
     (o, super::func::repeat(f))
 }
 
-/// Yield an initial value, then create a continuation from a closure.
+/// Yield an initial value, then create a coroutine from a closure.
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let mut counter = 0;
 /// let (initial, mut stage) = init_from_fn(42, move |x: i32| {

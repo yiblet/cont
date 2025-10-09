@@ -41,7 +41,7 @@ impl<S, O, R> PollState<S, O, R> {
     }
 }
 
-/// A continuation wrapper that allows polling for outputs and asynchronously providing inputs.
+/// A coroutine wrapper that allows polling for outputs and asynchronously providing inputs.
 ///
 /// Created via [`poll`] or [`init_poll`]. Wraps a [`Sans`] stage to enable explicit
 /// control over when inputs are provided and outputs are retrieved.
@@ -110,8 +110,8 @@ impl std::error::Error for PollError {}
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::poll::{Poll, PollOutput};
+/// use sans::prelude::*;
+/// use sans::poll::{Poll, PollOutput};
 ///
 /// let stage = repeat(|x: i32| x + 1);
 /// let mut pollable = poll(stage);

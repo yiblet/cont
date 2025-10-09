@@ -1,4 +1,4 @@
-//! Run continuations one after another
+//! Run coroutines one after another
 //!
 //! This module provides sequential execution combinators.
 

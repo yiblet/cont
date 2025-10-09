@@ -1,6 +1,6 @@
-//! Combining continuations together
+//! Combining coroutines together
 //!
-//! This module provides functions for chaining and transforming continuations.
+//! This module provides functions for chaining and transforming coroutines.
 
 mod chain;
 mod map;

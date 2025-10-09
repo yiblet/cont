@@ -1,11 +1,11 @@
-//! Chaining continuations sequentially.
+//! Chaining coroutines sequentially.
 //!
 //! This module provides the [`Chain`] and [`AndThen`] combinators for running
-//! continuations one after another.
+//! coroutines one after another.
 
 use crate::{InitSans, Sans, step::Step};
 
-/// A continuation that runs one stage to completion, then uses its return value
+/// A coroutine that runs one stage to completion, then uses its return value
 /// to create and run a second stage.
 ///
 /// This is similar to a monadic bind operation. The first stage runs until it
@@ -71,14 +71,14 @@ where
 
 /// Chains two stages where the second stage is created from the first stage's return value.
 ///
-/// This is a monadic bind operation for continuations. The first stage runs to completion,
+/// This is a monadic bind operation for coroutines. The first stage runs to completion,
 /// then its return value is passed to a function `f` that creates the second stage.
 ///
 /// **Important:** The function `f` must return an [`InitSans`], not just a [`Sans`]. Use the
 /// [`init()`](crate::build::init) helper to wrap a `Sans` with an initial output:
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// // Using init() makes the syntax cleaner
 /// let mut stage = once(|x: i32| x * 2)
@@ -100,8 +100,8 @@ where
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::compose::and_then;
+/// use sans::prelude::*;
+/// use sans::compose::and_then;
 ///
 /// // First stage yields once, then completes with a return value
 /// // Second stage uses that return value to configure its behavior
@@ -132,7 +132,7 @@ where
     }
 }
 
-/// Run the first continuation to completion, then feed its result to the second.
+/// Run the first coroutine to completion, then feed its result to the second.
 ///
 /// The first stage's `Done` value becomes the input to the second stage.
 /// Both stages must yield the same type.
@@ -144,9 +144,9 @@ where
     Chain(Some(l), r)
 }
 
-/// Create a chain from an InitSans stage and a continuation.
+/// Create a chain from an InitSans stage and a coroutine.
 ///
-/// This is used when chaining an initial stage (that yields immediately) with a continuation.
+/// This is used when chaining an initial stage (that yields immediately) with a coroutine.
 pub fn init_chain<I, O, L, R>(l: L, r: R) -> Chain<L, R>
 where
     L: InitSans<I, O>,

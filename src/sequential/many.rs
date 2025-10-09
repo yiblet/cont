@@ -1,4 +1,4 @@
-//! Running multiple continuations sequentially.
+//! Running multiple coroutines sequentially.
 //!
 //! This module provides the [`Many`] combinator for executing an array of stages
 //! in sequence, passing each return value to the next stage.
@@ -14,8 +14,8 @@ use crate::{Sans, Step};
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
-/// use cont::sequential::many;
+/// use sans::prelude::*;
+/// use sans::sequential::many;
 ///
 /// fn add_ten(x: i32) -> i32 { x + 10 }
 /// fn mul_two(x: i32) -> i32 { x * 2 }

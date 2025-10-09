@@ -1,6 +1,6 @@
-//! Building continuations from scratch
+//! Building coroutines from scratch
 //!
-//! This module provides functions and types for creating new continuation stages.
+//! This module provides functions and types for creating new coroutine stages.
 
 mod func;
 mod init;

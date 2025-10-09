@@ -1,19 +1,19 @@
-//! Continuations with initial output.
+//! Coroutines with initial output.
 //!
-//! This module defines the [`InitSans`] trait for continuations that can produce
+//! This module defines the [`InitSans`] trait for coroutines that can produce
 //! output immediately upon initialization, before receiving any input.
 //!
 //! # The InitSans Trait
 //!
 //! [`InitSans<I, O>`] represents a computation that:
 //! - Yields an initial output of type `O` before processing any input
-//! - Transitions to a [`Sans<I, O>`] continuation for subsequent processing
+//! - Transitions to a [`Sans<I, O>`] coroutine for subsequent processing
 //! - Can complete immediately without yielding if the computation finishes during init
 //!
 //! # Examples
 //!
 //! ```rust
-//! use cont::prelude::*;
+//! use sans::prelude::*;
 //!
 //! // Create a continuation with an initial value
 //! let stage = init_once(42, |x: i32| x + 1);
@@ -34,7 +34,7 @@ use crate::{
 /// for pipeline initialization or generators with seed values.
 ///
 /// ```rust
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let stage = init_once(42, |x: i32| x + 1);
 /// let (initial, mut cont) = stage.init().unwrap_yielded();
@@ -50,7 +50,7 @@ pub trait InitSans<I, O> {
     #[allow(clippy::type_complexity)]
     fn init(self) -> Step<(O, Self::Next), <Self::Next as Sans<I, O>>::Return>;
 
-    /// Chain with a continuation.
+    /// Chain with a coroutine.
     fn chain<R>(self, r: R) -> Chain<Self, R>
     where
         Self: Sized,
@@ -80,7 +80,7 @@ pub trait InitSans<I, O> {
         self.chain(repeat(f))
     }
 
-    /// Transform inputs before they reach the underlying continuation.
+    /// Transform inputs before they reach the underlying coroutine.
     fn map_input<I2, F>(self, f: F) -> MapInput<Self, F>
     where
         Self: Sized,

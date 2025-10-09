@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! # Cont: Composable Continuation-Based Programming
+//! # Sans: Composable Coroutine-Based Programming
 //!
 //! Build composable computations that can yield intermediate values and be driven
 //! to completion by external input.
@@ -18,7 +18,7 @@
 //! ## Example
 //!
 //! ```
-//! use cont::prelude::*;
+//! use sans::prelude::*;
 //!
 //! // Build a pipeline that yields initial value, processes input, then finishes
 //! let pipeline = init_once(10, |x: i32| x * 2)  // Yields 10, then multiplies input by 2
@@ -32,13 +32,13 @@
 //!
 //! This library is organized by capability:
 //!
-//! - **[`build`]** - Creating new continuation stages
-//! - **[`compose`]** - Chaining and transforming continuations
-//! - **[`result`]** - Result combinators for error handling in continuations
+//! - **[`build`]** - Creating new coroutine stages
+//! - **[`compose`]** - Chaining and transforming coroutines
+//! - **[`result`]** - Result combinators for error handling in coroutines
 //! - **[`poll`]** - Universal adapter implementing both [`Sans`] and [`InitSans`] for bridging APIs
-//! - **[`concurrent`]** - Running multiple continuations concurrently
-//! - **[`sequential`]** - Running continuations one after another
-//! - **[`run`]** - Executing continuation pipelines
+//! - **[`concurrent`]** - Running multiple coroutines concurrently
+//! - **[`sequential`]** - Running coroutines one after another
+//! - **[`run`]** - Executing coroutine pipelines
 //! - **[`prelude`]** - Common imports for quick start
 //!
 //! ## Common Functions

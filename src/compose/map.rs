@@ -1,7 +1,7 @@
-//! Transforming continuation inputs, outputs, and return values.
+//! Transforming coroutine inputs, outputs, and return values.
 //!
 //! This module provides [`MapInput`], [`MapYield`], and [`MapReturn`] combinators
-//! for adapting continuations to different types.
+//! for adapting coroutines to different types.
 
 use crate::{InitSans, Sans, step::Step};
 
@@ -13,12 +13,12 @@ pub struct MapInput<S, F> {
     stage: S,
 }
 
-/// Create a continuation that transforms input before passing it to the wrapped stage.
+/// Create a coroutine that transforms input before passing it to the wrapped stage.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let stage = repeat(|x: i32| x * 2);
 /// let mut mapped = map_input(|s: &str| s.parse::<i32>().unwrap(), stage);
@@ -78,12 +78,12 @@ pub struct MapYield<S, F, I, O1> {
     _phantom: std::marker::PhantomData<(I, O1)>,
 }
 
-/// Create a continuation that transforms yielded values from the wrapped stage.
+/// Create a coroutine that transforms yielded values from the wrapped stage.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let stage = repeat(|x: i32| x * 2);
 /// let mut mapped = map_yield(|y: i32| y.to_string(), stage);
@@ -150,12 +150,12 @@ pub struct MapReturn<S, F> {
     stage: S,
 }
 
-/// Create a continuation that transforms the final result from the wrapped stage.
+/// Create a coroutine that transforms the final result from the wrapped stage.
 ///
 /// # Examples
 ///
 /// ```
-/// use cont::prelude::*;
+/// use sans::prelude::*;
 ///
 /// let stage = once(|x: i32| x + 5);
 /// let mut mapped = map_return(|r: i32| r * 10, stage);
