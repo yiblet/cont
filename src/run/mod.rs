@@ -1,3 +1,5 @@
+//! Running continuations to completion
+//!
 //! Functions for driving continuations to completion.
 //!
 //! This module provides both synchronous and asynchronous execution functions,
@@ -109,7 +111,7 @@ where
 /// This is the most commonly used function - a shorthand for `handle_init_sync`.
 ///
 /// ```rust
-/// use cont::*;
+/// use cont::prelude::*;
 ///
 /// let pipeline = init_once(10, |x: i32| x * 2).chain(once(|x: i32| x + 1));
 /// let result = handle(pipeline, |output| output + 5);
@@ -139,7 +141,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{chain, init_once, once};
+    use crate::{compose::chain, build::{init_once, once}};
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::future::{Future, ready};

@@ -1,0 +1,78 @@
+use crate::Step;
+use super::func::{FromFn, Once, Repeat};
+
+/// Yield an initial value, then apply a function once.
+///
+/// Combines immediate output with single function application.
+pub fn init_once<I, O, F: FnOnce(I) -> O>(o: O, f: F) -> (O, Once<F>) {
+    (o, super::func::once(f))
+}
+
+/// Yield an initial value, then apply a function indefinitely.
+///
+/// Useful for generators that need to emit a seed value before starting their loop.
+pub fn init_repeat<I, O, F: FnMut(I) -> O>(o: O, f: F) -> (O, Repeat<F>) {
+    (o, super::func::repeat(f))
+}
+
+/// Yield an initial value, then create a continuation from a closure.
+///
+/// ```rust
+/// use cont::prelude::*;
+///
+/// let mut counter = 0;
+/// let (initial, mut stage) = init_from_fn(42, move |x: i32| {
+///     counter += 1;
+///     if counter < 3 { Step::Yielded(x * counter) } else { Step::Complete(x + counter) }
+/// });
+/// assert_eq!(initial, 42);
+/// assert_eq!(stage.next(10).unwrap_yielded(), 10);
+/// assert_eq!(stage.next(10).unwrap_yielded(), 20);
+/// assert_eq!(stage.next(10).unwrap_complete(), 13);
+/// ```
+pub fn init_from_fn<I, O, D, F>(initial: O, f: F) -> (O, FromFn<F>)
+where
+    F: FnMut(I) -> Step<O, D>,
+{
+    (initial, super::func::from_fn(f))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{InitSans, Sans};
+    use std::mem::size_of_val;
+
+    #[test]
+    fn test_simple_addition() {
+        let mut prev = 1;
+        let fib = init_repeat(1, move |n: u128| {
+            let next = prev + n;
+            prev = next;
+            next
+        });
+
+        let (_, mut next) = fib.init().unwrap_yielded();
+        for i in 1..11 {
+            let cur = next.next(1).unwrap_yielded();
+            assert_eq!(i + 1, cur);
+        }
+    }
+
+    #[test]
+    fn test_simple_divider() {
+        let mut start = 101323012313805546028676730784521326u128;
+        let divider = init_repeat(start, |divisor: u128| {
+            start /= divisor;
+            start
+        });
+
+        assert_eq!(size_of_val(&divider), 32);
+        let (mut cur, mut next) = divider.init().unwrap_yielded();
+        for i in 2..20 {
+            let next_cur = next.next(i).unwrap_yielded();
+            assert_eq!(cur / i, next_cur);
+            cur = next_cur;
+        }
+    }
+}

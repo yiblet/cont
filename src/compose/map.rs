@@ -83,3 +83,41 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build::repeat;
+    use crate::InitSans;
+
+    #[test]
+    fn test_map_input_and_map_yield_pipeline() {
+        let mut total = 0_i64;
+        let init_stage = (0_i64, repeat(move |delta: i64| {
+            total += delta;
+            total
+        }))
+        .map_input(|cmd: &str| -> i64 {
+            let mut parts = cmd.split_whitespace();
+            let op = parts.next().expect("operation must exist");
+            let amount: i64 = parts
+                .next()
+                .expect("amount must exist")
+                .parse()
+                .expect("amount must parse");
+            match op {
+                "add" => amount,
+                "sub" => -amount,
+                _ => panic!("unsupported op: {op}"),
+            }
+        })
+        .map_yield(|value: i64| format!("total={value}"));
+
+        let (initial_total, mut stage) = init_stage.init().unwrap_yielded();
+
+        assert_eq!("total=0", initial_total);
+        assert_eq!("total=5", stage.next("add 5").unwrap_yielded());
+        assert_eq!("total=2", stage.next("sub 3").unwrap_yielded());
+        assert_eq!("total=7", stage.next("add 5").unwrap_yielded());
+    }
+}

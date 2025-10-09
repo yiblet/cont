@@ -1,136 +1,319 @@
-# Cont
+# cont, composable continuation-based programming
 
-A Rust library for composable continuation-based programming.
+[![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![crates.io Version](https://img.shields.io/crates/v/cont.svg)](https://crates.io/crates/cont)
+[![Minimum rustc version](https://img.shields.io/badge/rustc-1.85.0+-lightgray.svg)](#rust-version-requirements-msrv)
 
-## Overview
+cont is a continuation combinators library written in Rust. Its goal is to provide tools
+to build composable, resumable computations without compromising on speed, safety, or ergonomics.
+To that end, it uses Rust's *strong typing* and *ownership system* to produce
+correct, efficient programs, and provides functions, traits and combinators to abstract
+the error-prone plumbing of stateful computation.
 
-Cont provides traits and utilities for building composable computations using continuations. It enables you to create stages of computation that can yield intermediate values and resume execution based on external input.
+*cont will help you build pipelines that yield, resume, and compose beautifully*
 
-## Core Concepts
+<!-- toc -->
 
-### `Cont<A>` Trait
+- [Example](#example)
+- [Documentation](#documentation)
+- [Why use cont?](#why-use-cont)
+  - [Interactive Protocols](#interactive-protocols)
+  - [Streaming Pipelines](#streaming-pipelines)
+  - [State Machines](#state-machines)
+  - [Incremental Computation](#incremental-computation)
+- [Continuation Combinators](#continuation-combinators)
+- [Technical Features](#technical-features)
+- [Rust Version Requirements (MSRV)](#rust-version-requirements-msrv)
+- [Installation](#installation)
+- [Module Organization](#module-organization)
 
-The fundamental continuation trait that represents a computation stage:
+<!-- tocstop -->
 
-```rust
-pub trait Cont<A> {
-    type Yield;  // Type of intermediate values yielded
-    type Done;   // Type of final result
-    fn next(&mut self, input: A) -> Either<Self::Yield, Self::Done>;
-}
-```
+## Example
 
-### `First<A>` Trait
-
-Represents computations that can provide an initial yield before processing any input:
-
-```rust
-pub trait First<A> {
-    type Next: Cont<A>;
-    fn first(self) -> Either<(<Self::Next as Cont<A>>::Yield, Self::Next), <Self::Next as Cont<A>>::Done>;
-}
-```
-
-## Key Components
-
-### Building Blocks
-
-- **`Once<F>`** - Execute a function once, then complete
-- **`Repeat<F>`** - Execute a function repeatedly
-- **`Chain<L, R>`** - Chain two stages sequentially
-
-### Transformations
-
-- **`MapInput<S, F>`** - Transform input before processing
-- **`MapYield<S, F>`** - Transform yielded values
-- **`MapDone<S, F>`** - Transform final result
-
-### Handlers
-
-Execution utilities for running continuation stages:
-
-- `handle_cont_sync()` - Run continuation synchronously
-- `handle_cont_async()` - Run continuation asynchronously
-- `handle_first_sync()` - Run First stage synchronously
-- `handle_first_async()` - Run First stage asynchronously
-- `handle()` / `handle_async()` - Convenience functions
-
-## Usage Examples
-
-### Simple Fibonacci Generator
+Interactive calculator that maintains state across inputs:
 
 ```rust
-use cont::*;
+use cont::prelude::*;
 
-let mut prev = 1;
-let fib = first_repeat(1, move |n: u128| {
-    let next = prev + n;
-    prev = next;
-    next
-});
-
-let (initial, mut stage) = fib.first().unwrap_left();
-for i in 1..11 {
-    let current = stage.next(1).unwrap_left();
-    println!("Fibonacci {}: {}", i + 1, current);
-}
-```
-
-### Chained Computation
-
-```rust
-use cont::*;
-
-let initializer = first_once(10_u32, |input: u32| input + 5);
-let multiplier = repeat(|input: u32| input * 2);
-let chain = initializer.chain(multiplier);
-
-let result = handle(chain, |yielded| yielded + 1);
-```
-
-### Input/Output Transformation Pipeline
-
-```rust
-use cont::*;
-
+// Build a stateful calculator that accumulates results
 let mut total = 0_i64;
-let calculator = first_repeat(0_i64, move |delta: i64| {
+let calculator = init_repeat(0_i64, move |delta: i64| {
     total += delta;
     total
 })
 .map_input(|cmd: &str| -> i64 {
     let mut parts = cmd.split_whitespace();
     let op = parts.next().expect("operation");
-    let amount: i64 = parts.next().expect("amount").parse().expect("valid number");
+    let amount: i64 = parts.next().expect("amount").parse().expect("number");
     match op {
         "add" => amount,
         "sub" => -amount,
-        _ => panic!("unsupported operation"),
+        _ => panic!("unknown operation"),
     }
 })
 .map_yield(|value: i64| format!("total={}", value));
 
-let (initial, mut stage) = calculator.first().unwrap_left();
-println!("{}", initial); // "total=0"
-println!("{}", stage.next("add 5").unwrap_left()); // "total=5"
-println!("{}", stage.next("sub 3").unwrap_left()); // "total=2"
+// Execute the pipeline
+let (initial, mut stage) = calculator.init().unwrap_yielded();
+println!("{}", initial);  // "total=0"
+
+println!("{}", stage.next("add 5").unwrap_yielded());   // "total=5"
+println!("{}", stage.next("sub 3").unwrap_yielded());   // "total=2"
+println!("{}", stage.next("add 10").unwrap_yielded());  // "total=12"
 ```
 
-## Extension Traits
+Chained pipeline with transformation:
 
-Both `ContExt` and `FirstExt` provide convenient builder methods:
+```rust
+use cont::prelude::*;
 
-- `.chain(other)` - Chain with another stage
-- `.chain_once(f)` - Chain with a one-time function
-- `.chain_repeat(f)` - Chain with a repeating function
-- `.map_input(f)` - Transform input
-- `.map_yield(f)` - Transform yields
-- `.map_done(f)` - Transform final result
+let pipeline = init_once(10, |x: i32| x * 2)
+    .map_yield(|x| x + 5)
+    .chain(once(|x: i32| x * 3))
+    .map_return(|x| format!("Result: {}", x));
 
-## Dependencies
+let result = handle(pipeline, |output| {
+    println!("Step: {}", output);
+    output  // Pass through
+});
 
-- `either` - For `Either<L, R>` enum representing two possible values
+println!("{}", result);  // "Result: 45"
+```
+
+## Documentation
+
+- [API Documentation](https://docs.rs/cont)
+- [Examples directory](https://github.com/your-repo/cont/tree/main/examples) *(coming soon)*
+
+## Why use cont?
+
+If you want to write:
+
+### Interactive Protocols
+
+cont was designed for building interactive protocols where computation happens in stages,
+each stage can yield intermediate results, and the next step depends on external input.
+Compared to handwritten state machines, cont pipelines are:
+
+- Composable and reusable
+- Type-safe with compile-time guarantees
+- Free from manual state management bugs
+- Easy to test in isolation
+
+**Use cases:**
+- Network protocols with request-response cycles
+- REPLs and interactive command processors
+- Multi-step wizards and forms
+- Game state machines
+
+### Streaming Pipelines
+
+cont excels at processing data in stages where each stage can transform, filter, or
+accumulate results. The type system ensures stages compose correctly, and the
+continuation model makes it easy to handle partial data:
+
+- Transform data through multiple processing stages
+- Maintain state across stream elements
+- Handle backpressure and control flow
+- Compose transformations declaratively
+
+**Use cases:**
+- Data processing pipelines
+- Stream transformations
+- Event sourcing systems
+- ETL processes
+
+### State Machines
+
+Building explicit state machines with cont is natural and type-safe. Each state
+is a continuation that can transition to the next state or complete:
+
+- Explicit state transitions
+- Type-safe state representation
+- Easy to visualize and debug
+- Composable substates
+
+**Use cases:**
+- Protocol implementations
+- Workflow engines
+- Game AI
+- UI navigation flows
+
+### Incremental Computation
+
+cont makes it easy to build computations that can be paused, resumed, and
+composed with other computations:
+
+- Pause computation and resume later
+- Compose sub-computations
+- Cancel or short-circuit pipelines
+- Handle errors at any stage
+
+**Use cases:**
+- Async workflows
+- Background jobs that can be paused
+- Cooperative multitasking
+- Cancellable operations
+
+## Continuation Combinators
+
+Continuation combinators are an approach to stateful computation that uses
+small, composable functions instead of complex state machines. Instead of
+writing a monolithic state machine with explicit state tracking, you compose
+very small functions with specific purposes like "multiply by 2", or
+"add 1 and complete", and assemble them into meaningful pipelines.
+
+The resulting code is:
+- Small and focused
+- Easy to understand
+- Close to the specification you'd write naturally
+- Highly composable and reusable
+
+This has several advantages:
+
+- **Easy to write**: Each stage is simple and focused on one task
+- **Easy to test**: Test stages in isolation with unit tests
+- **Easy to reuse**: Stages can be used in multiple pipelines
+- **Type-safe**: The compiler ensures stages compose correctly
+- **Composable**: Build complex behavior from simple pieces
+
+## Technical Features
+
+cont provides:
+- [x] **Type-safe composition**: Strong typing ensures stages compose correctly
+- [x] **Zero-copy**: Continuations don't copy data unnecessarily
+- [x] **Flexible execution**: Both synchronous and asynchronous execution
+- [x] **Concurrent execution**: Run multiple continuations concurrently with `join`
+- [x] **Memory efficient**: Stages are dropped after completion to free resources
+- [x] **Transformations**: Map inputs, outputs, and return values
+- [x] **Method chaining**: Fluent API for building pipelines
+- [x] **No unsafe code**: The entire library is `#![forbid(unsafe_code)]`
+- [x] **Well tested**: Comprehensive test suite with doctests
+
+## Rust Version Requirements (MSRV)
+
+cont requires **Rustc version 1.85 or greater**.
+
+## Installation
+
+cont is available on [crates.io](https://crates.io/crates/cont) and can be included in your Cargo enabled project like this:
+
+```toml
+[dependencies]
+cont = "0.1.0-alpha.2"
+```
+
+Then in your code:
+
+```rust
+use cont::prelude::*;
+```
+
+## Module Organization
+
+cont is organized by **capability** - what you want to accomplish:
+
+| Module | Purpose | Key Functions |
+|--------|---------|---------------|
+| **`cont::build`** | Creating continuation stages | `once`, `repeat`, `from_fn`, `init_once`, `init_repeat` |
+| **`cont::compose`** | Combining continuations | `chain`, `init_chain`, `map_input`, `map_yield`, `map_return` |
+| **`cont::concurrent`** | Concurrent execution | `poll`, `join`, `join_vec` |
+| **`cont::sequential`** | Sequential execution | `many` |
+| **`cont::run`** | Executing pipelines | `handle`, `handle_async` |
+| **`cont::prelude`** | Common imports | All frequently used items |
+
+### Quick Examples
+
+```rust
+use cont::prelude::*;
+
+// Build: Create stages
+let stage = once(|x: i32| x * 2);
+let stage = repeat(|x: i32| x + 1);
+let stage = init_once(42, |x: i32| x * 2);
+
+// Compose: Chain and transform
+let pipeline = stage1.chain(stage2);
+let transformed = stage.map_yield(|x| x * 2);
+
+// Run: Execute to completion
+let result = handle(pipeline, |output| output + 1);
+
+// Concurrent: Run multiple stages
+use cont::concurrent::*;
+let mut joined = join([stage1, stage2, stage3]);
+```
+
+### Core Types
+
+**`Sans<I, O>`** - A continuation that:
+- Takes input of type `I`
+- Yields output of type `O`
+- Eventually completes with a `Return` value
+
+**`InitSans<I, O>`** - A continuation that:
+- Provides an initial output before processing input
+- Then becomes a `Sans<I, O>` continuation
+
+**`Step<Y, D>`** - The result of each step:
+- `Yielded(Y)` - Continue with intermediate value
+- `Complete(D)` - Finished with final value
+
+## Design Decisions
+
+cont is built with a clear set of principles:
+
+### Minimal Dependencies
+
+The library maintains as few dependencies as possible. Currently, cont only depends on [`either`](https://crates.io/crates/either) for the `Either<L, R>` type used in generic trait implementations. This keeps the dependency tree small, improves compilation times, and reduces supply chain risk.
+
+### No Unsafe Code
+
+cont is `#![forbid(unsafe_code)]` - the entire library leverages Rust's type system and ownership model to provide safe abstractions. This ensures memory safety and prevents undefined behavior without sacrificing performance.
+
+### Generator Compatibility
+
+The library's design stays similar to Rust's [nightly generator syntax](https://doc.rust-lang.org/beta/unstable-book/language-features/generators.html) and semantics. This intentional alignment means that when generators stabilize, cont can potentially interoperate with native generator syntax, providing a migration path and compatibility layer.
+
+### Stable Rust Only
+
+cont compiles on stable Rust (MSRV 1.65+) without requiring any nightly features. This ensures the library can be used in production environments and maintains compatibility with stable toolchains.
+
+### Zero-Cost Abstractions
+
+Continuations are designed to be as zero-cost as possible:
+- No allocations in core combinators (`once`, `repeat`, `chain`, `map_*`)
+- Stack-based state machines
+- Inlining and optimization friendly
+- States are dropped immediately after completion to free resources
+
+The only allocations occur in dynamic-size operations (`join_vec`, `init_join_vec`) which require `Vec` for runtime-determined numbers of continuations. Fixed-size operations use stack-allocated arrays.
+
+## Inspiration
+
+cont draws inspiration from several excellent projects in the Rust ecosystem:
+
+- **[nom](https://github.com/rust-bakery/nom)** - The parser combinator library that pioneered composable, type-safe parsing in Rust. cont applies similar principles to stateful computation and continuation pipelines.
+
+- **[genawaiter](https://github.com/whatisaphone/genawaiter)** - Generator implementation that explores yielding and resumption patterns in Rust.
+
+- **[corosensei](https://github.com/Amanieu/corosensei)** - Stackful coroutine library demonstrating low-level continuation control in Rust.
+
+- **[propane](https://github.com/withoutboats/propane)** - Generator and coroutine exploration focusing on ergonomic async patterns.
+
+While these libraries focus on different aspects (parsing, stackful coroutines, async generators), cont synthesizes ideas from all of them to provide a continuation combinator library focused on composability, type safety, and explicit control flow.
+
+## Contributing
+
+- TBD
+
+## Version
+
+Current version: **0.1.0-alpha.2**
+
+This is an alpha release. The API may change in future versions based on feedback and real-world usage.
 
 ## License
 
-See the license file in the repository for licensing information.
+See the LICENSE file in the repository for licensing information.

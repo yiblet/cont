@@ -18,7 +18,7 @@
 //! ## Example
 //!
 //! ```
-//! use cont::*;
+//! use cont::prelude::*;
 //!
 //! // Build a pipeline that yields initial value, processes input, then finishes
 //! let pipeline = init_once(10, |x: i32| x * 2)  // Yields 10, then multiplies input by 2
@@ -28,26 +28,45 @@
 //! let result = handle(pipeline, |output| output + 5);
 //! ```
 //!
+//! ## Module Organization
+//!
+//! This library is organized by capability:
+//!
+//! - **[`build`]** - Creating new continuation stages
+//! - **[`compose`]** - Chaining and transforming continuations
+//! - **[`concurrent`]** - Running multiple continuations concurrently
+//! - **[`sequential`]** - Running continuations one after another
+//! - **[`run`]** - Executing continuation pipelines
+//! - **[`prelude`]** - Common imports for quick start
+//!
 //! ## Common Functions
 //!
 //! **Building Stages:**
-//! - [`once(f)`] - Apply function once, then complete
-//! - [`repeat(f)`] - Apply function repeatedly
-//! - [`init_once(value, f)`] - Yield initial value, then apply function once
-//! - [`chain(a, b)`] - Run stage `a` to completion, then run stage `b`
+//! - [`once(f)`](build::once) - Apply function once, then complete
+//! - [`repeat(f)`](build::repeat) - Apply function repeatedly
+//! - [`init_once(value, f)`](build::init_once) - Yield initial value, then apply function once
+//! - [`chain(a, b)`](compose::chain) - Run stage `a` to completion, then run stage `b`
 //!
 //! **Execution:**
-//! - [`handle(stage, responder)`] - Drive computation with sync responses
-//! - [`handle_async(stage, responder)`] - Drive computation with async responses
+//! - [`handle(stage, responder)`](run::handle) - Drive computation with sync responses
+//! - [`handle_async(stage, responder)`](run::handle_async) - Drive computation with async responses
 
-mod combinators;
-mod handler;
-mod init;
-mod sans;
+// Core modules (essential types)
 mod step;
+mod sans;
+mod init;
 
-pub use combinators::*;
-pub use handler::*;
-pub use init::*;
-pub use sans::*;
-pub use step::*;
+// Capability modules
+pub mod build;
+pub mod compose;
+pub mod concurrent;
+pub mod sequential;
+pub mod run;
+
+// Convenience
+pub mod prelude;
+
+// Re-export essential types at root
+pub use step::Step;
+pub use sans::{Sans, PoisonError};
+pub use init::InitSans;

@@ -15,7 +15,7 @@ where
 /// Create a continuation from a closure.
 ///
 /// ```rust
-/// use cont::*;
+/// use cont::prelude::*;
 ///
 /// let mut toggle = from_fn(|x: bool| {
 ///     if x { Step::Yielded(!x) } else { Step::Complete(x) }
@@ -45,7 +45,7 @@ where
 /// Create a continuation that applies a function indefinitely.
 ///
 /// ```rust
-/// use cont::*;
+/// use cont::prelude::*;
 ///
 /// let mut doubler = repeat(|x: i32| x * 2);
 /// assert_eq!(doubler.next(5).unwrap_yielded(), 10);
@@ -64,7 +64,7 @@ pub struct Once<F>(Option<F>);
 /// Create a continuation that applies a function once.
 ///
 /// ```rust
-/// use cont::*;
+/// use cont::prelude::*;
 ///
 /// let mut stage = once(|x: i32| x + 10);
 /// assert_eq!(stage.next(5).unwrap_yielded(), 15);

@@ -7,9 +7,8 @@ use std::{
 
 use crate::{
     InitSans,
-    combinators::{
-        AndThen, Chain, MapInput, MapReturn, MapYield, Once, Repeat, and_then, chain, once, repeat,
-    },
+    compose::{AndThen, Chain, MapInput, MapReturn, MapYield, and_then, chain},
+    build::{Once, Repeat, once, repeat},
     step::Step,
 };
 
@@ -19,7 +18,7 @@ use crate::{
 /// This allows building composable, resumable computations.
 ///
 /// ```rust
-/// use cont::*;
+/// use cont::prelude::*;
 ///
 /// let mut stage = once(|x: i32| x * 2);
 /// assert_eq!(stage.next(5).unwrap_yielded(), 10);
@@ -81,7 +80,7 @@ pub trait Sans<I, O> {
         Self: Sized,
         F: FnMut(I2) -> I,
     {
-        crate::combinators::map_input(f, self)
+        crate::compose::map_input(f, self)
     }
 
     /// Transform yielded values before returning them.
@@ -90,7 +89,7 @@ pub trait Sans<I, O> {
         Self: Sized,
         F: FnMut(O) -> O2,
     {
-        crate::combinators::map_yield(f, self)
+        crate::compose::map_yield(f, self)
     }
 
     /// Transform the final result when completing.
@@ -99,7 +98,7 @@ pub trait Sans<I, O> {
         Self: Sized,
         F: FnMut(Self::Return) -> D2,
     {
-        crate::combinators::map_return(f, self)
+        crate::compose::map_return(f, self)
     }
 }
 

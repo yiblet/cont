@@ -1,45 +1,5 @@
-#![allow(dead_code)] // new join implementation is not yet stable
 use crate::{InitSans, Sans, Step};
 use super::poll::{poll, init_poll, Poll, PollOutput, PollError, Pollable};
-
-pub fn many<const N: usize, I, O, S>(rest: [S; N]) -> Many<N, S>
-where
-    S: Sans<I, O, Return = I>,
-{
-    Many {
-        states: rest.map(|r| Some(r)),
-        index: 0,
-    }
-}
-
-pub struct Many<const N: usize, S> {
-    states: [Option<S>; N],
-    index: usize,
-}
-
-impl<const N: usize, I, O, S> Sans<I, O> for Many<N, S>
-where
-    S: Sans<I, O, Return = I>,
-{
-    type Return = S::Return;
-    fn next(&mut self, mut input: I) -> Step<O, Self::Return> {
-        loop {
-            match self.states.get_mut(self.index) {
-                Some(Some(s)) => match s.next(input) {
-                    Step::Yielded(o) => return Step::Yielded(o),
-                    Step::Complete(a) => {
-                        self.index += 1;
-                        input = a;
-                    }
-                },
-                Some(None) => {
-                    self.index += 1;
-                }
-                None => return Step::Complete(input),
-            }
-        }
-    }
-}
 
 pub fn init_join<const N: usize, I, O, S, T>(rest: [T; N]) -> Join<N, S, O, S::Return>
 where
@@ -400,7 +360,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::combinators::func::{once, repeat};
+    use crate::build::{once, repeat};
 
     #[test]
     fn test_join_two_sans_basic() {
@@ -615,10 +575,10 @@ mod tests {
 
     #[test]
     fn test_join_empty_array() {
-        use crate::combinators::func;
+        use crate::build;
         // Need a concrete type for empty array
         #[allow(clippy::type_complexity)]
-        let joined: Join<0, func::Repeat<fn(i32) -> i32>, i32, i32> = join([]);
+        let joined: Join<0, build::Repeat<fn(i32) -> i32>, i32, i32> = join([]);
 
         // Should immediately complete with empty array
         let mut joined = joined;
@@ -678,9 +638,9 @@ mod tests {
 
     #[test]
     fn test_join_vec_empty() {
-        use crate::combinators::func;
+        use crate::build;
         #[allow(clippy::type_complexity)]
-        let sans: Vec<func::Repeat<fn(i32) -> i32>> = vec![];
+        let sans: Vec<build::Repeat<fn(i32) -> i32>> = vec![];
         let mut joined = join_vec(sans);
 
         // Should immediately complete with empty vec

@@ -99,3 +99,38 @@ where
         }
     }
 }
+
+/// Chain an `InitSans` stage with a continuation.
+///
+/// Allows connecting stages that have initial yields with regular continuations.
+pub fn init_chain<I, O, L, R>(first: (O, L), r: R) -> (O, Chain<L, R>)
+where
+    L: Sans<I, O, Return = I>,
+    R: Sans<I, O>,
+{
+    (first.0, chain(first.1, r))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build::{once, repeat};
+
+    #[test]
+    fn test_chain_switches_to_second_stage_after_first_done() {
+        let mut stage = chain(once(|val: u32| val + 1), repeat(|val: u32| val * 2));
+
+        assert_eq!(stage.next(3).unwrap_yielded(), 4);
+        assert_eq!(stage.next(4).unwrap_yielded(), 8);
+        assert_eq!(stage.next(5).unwrap_yielded(), 10);
+    }
+
+    #[test]
+    fn test_chain_propagates_done_from_second_stage() {
+        let mut stage = chain(once(|val: u32| val + 1), once(|val: u32| val * 2));
+
+        assert_eq!(stage.next(2).unwrap_yielded(), 3);
+        assert_eq!(stage.next(3).unwrap_yielded(), 6);
+        assert_eq!(stage.next(4).unwrap_complete(), 4);
+    }
+}

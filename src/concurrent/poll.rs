@@ -149,7 +149,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::combinators::func::{once, repeat};
+    use crate::build::{once, repeat};
 
     #[test]
     fn test_poll_basic_needs_input() {
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_init_poll_with_tuple_init() {
-        use crate::combinators::func::repeat;
+        use crate::build::repeat;
 
         let init = (100, repeat(|x: i32| x + 1));
         let mut pollable = init_poll(init);
@@ -326,5 +326,4 @@ mod tests {
             other => panic!("Expected Complete(Ok(20)), got {:?}", other),
         }
     }
-
 }

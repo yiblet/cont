@@ -1,6 +1,7 @@
 use crate::{
-    Chain, FromFn, MapInput, MapReturn, MapYield, Once, Repeat, Sans, Step, chain, from_fn,
-    map_input, map_return, map_yield, once, repeat,
+    Sans, Step,
+    compose::{Chain, MapInput, MapReturn, MapYield, chain, map_input, map_return, map_yield},
+    build::{Once, Repeat, once, repeat},
 };
 
 /// Computations that yield an initial value before processing input.
@@ -9,7 +10,7 @@ use crate::{
 /// for pipeline initialization or generators with seed values.
 ///
 /// ```rust
-/// use cont::*;
+/// use cont::prelude::*;
 ///
 /// let stage = init_once(42, |x: i32| x + 1);
 /// let (initial, mut cont) = stage.init().unwrap_yielded();
@@ -173,57 +174,10 @@ where
     }
 }
 
-/// Chain an `InitSans` stage with a continuation.
-///
-/// Allows connecting stages that have initial yields with regular continuations.
-pub fn init_chain<I, O, L, R>(first: (O, L), r: R) -> (O, Chain<L, R>)
-where
-    L: Sans<I, O, Return = I>,
-    R: Sans<I, O>,
-{
-    (first.0, chain(first.1, r))
-}
-
-/// Yield an initial value, then apply a function once.
-///
-/// Combines immediate output with single function application.
-pub fn init_once<I, O, F: FnOnce(I) -> O>(o: O, f: F) -> (O, Once<F>) {
-    (o, once(f))
-}
-
-/// Yield an initial value, then apply a function indefinitely.
-///
-/// Useful for generators that need to emit a seed value before starting their loop.
-pub fn init_repeat<I, O, F: FnMut(I) -> O>(o: O, f: F) -> (O, Repeat<F>) {
-    (o, repeat(f))
-}
-
-/// Yield an initial value, then create a continuation from a closure.
-///
-/// ```rust
-/// use cont::*;
-///
-/// let mut counter = 0;
-/// let (initial, mut stage) = init_from_fn(42, move |x: i32| {
-///     counter += 1;
-///     if counter < 3 { Step::Yielded(x * counter) } else { Step::Complete(x + counter) }
-/// });
-/// assert_eq!(initial, 42);
-/// assert_eq!(stage.next(10).unwrap_yielded(), 10);
-/// assert_eq!(stage.next(10).unwrap_yielded(), 20);
-/// assert_eq!(stage.next(10).unwrap_complete(), 13);
-/// ```
-pub fn init_from_fn<I, O, D, F>(initial: O, f: F) -> (O, FromFn<F>)
-where
-    F: FnMut(I) -> Step<O, D>,
-{
-    (initial, from_fn(f))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem::size_of_val;
+    use crate::build::{init_once, init_repeat, repeat};
 
     fn add_three(value: i32) -> i32 {
         value + 3
@@ -250,39 +204,6 @@ mod tests {
             <Self::Next as Sans<&'static str, &'static str>>::Return,
         > {
             Step::Complete("left-done")
-        }
-    }
-
-    #[test]
-    fn test_simple_addition() {
-        let mut prev = 1;
-        let fib = init_repeat(1, move |n: u128| {
-            let next = prev + n;
-            prev = next;
-            next
-        });
-
-        let (_, mut next) = fib.init().unwrap_yielded();
-        for i in 1..11 {
-            let cur = next.next(1).unwrap_yielded();
-            assert_eq!(i + 1, cur);
-        }
-    }
-
-    #[test]
-    fn test_simple_divider() {
-        let mut start = 101323012313805546028676730784521326u128;
-        let divider = init_repeat(start, |divisor: u128| {
-            start /= divisor;
-            start
-        });
-
-        assert_eq!(size_of_val(&divider), 32);
-        let (mut cur, mut next) = divider.init().unwrap_yielded();
-        for i in 2..20 {
-            let next_cur = next.next(i).unwrap_yielded();
-            assert_eq!(cur / i, next_cur);
-            cur = next_cur;
         }
     }
 
@@ -337,6 +258,7 @@ mod tests {
 
     #[test]
     fn test_chain_and_map_done_resume_flow() {
+        use crate::build::once;
         let initializer = init_once(42_u32, |input: u32| input + 1);
         let finisher = once(|input: u32| input * 3);
 
@@ -375,6 +297,7 @@ mod tests {
 
     #[test]
     fn test_first_ext_map_input_yield_done() {
+        use crate::build::once;
         let initializer = init_once(5_u32, |input: u32| input + 2);
         let finisher = once(|value: u32| value * 2);
 

@@ -27,13 +27,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        rust: [1.85.0, stable]
         features:
           - --no-default-features
           - --all-features
           - "" # default features
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
         run: cargo test ${{ matrix.features }}
