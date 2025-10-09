@@ -1,5 +1,31 @@
-use crate::Step;
+use crate::{Sans, Step};
 use super::func::{FromFn, Once, Repeat};
+
+/// Create an `InitSans` by pairing an initial output with a continuation.
+///
+/// This is a convenience function for wrapping a `Sans` in the tuple form required
+/// by APIs like [`and_then`](crate::Sans::and_then). Instead of manually writing
+/// `(output, continuation)`, you can use `init(output, continuation)`.
+///
+/// # Examples
+///
+/// ```rust
+/// use cont::prelude::*;
+///
+/// // Using init() with and_then
+/// let mut stage = once(|x: i32| x * 2)
+///     .and_then(|val| init(val * 10, repeat(move |x| x + val)));
+///
+/// assert_eq!(stage.next(5).unwrap_yielded(), 10);  // First stage: 5 * 2
+/// assert_eq!(stage.next(7).unwrap_yielded(), 70);  // Second stage init: 7 * 10
+/// assert_eq!(stage.next(3).unwrap_yielded(), 10);  // Second stage: 3 + 7
+/// ```
+pub fn init<I, O, S>(output: O, continuation: S) -> (O, S)
+where
+    S: Sans<I, O>,
+{
+    (output, continuation)
+}
 
 /// Yield an initial value, then apply a function once.
 ///

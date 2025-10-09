@@ -69,9 +69,19 @@ where
 /// This is a monadic bind operation for continuations. The first stage runs to completion,
 /// then its return value is passed to a function `f` that creates the second stage.
 ///
-/// **Important:** The function `f` must return an [`InitSans`], not just a [`Sans`]. This typically
-/// means returning a tuple `(initial_output, continuation)` or using [`Step::Complete`] for
-/// immediate completion.
+/// **Important:** The function `f` must return an [`InitSans`], not just a [`Sans`]. Use the
+/// [`init()`](crate::build::init) helper to wrap a `Sans` with an initial output:
+///
+/// ```rust
+/// use cont::prelude::*;
+///
+/// // Using init() makes the syntax cleaner
+/// let mut stage = once(|x: i32| x * 2)
+///     .and_then(|val| init(val * 10, repeat(move |x| x + val)));
+/// ```
+///
+/// Alternatively, you can return a tuple `(initial_output, continuation)` or use
+/// [`Step::Complete`] for immediate completion.
 ///
 /// # Arguments
 ///
@@ -92,7 +102,7 @@ where
 /// // Second stage uses that return value to configure its behavior
 /// let mut stage = and_then(
 ///     once(|x: i32| x * 2),  // yields x*2, returns next input
-///     |return_val| (return_val * 10, repeat(move |y: i32| y + return_val)),
+///     |return_val| init(return_val * 10, repeat(move |y: i32| y + return_val)),
 /// );
 ///
 /// // First stage yields 5 * 2 = 10

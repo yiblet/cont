@@ -8,7 +8,7 @@ pub use crate::{Step, Sans, InitSans};
 // Most common constructors
 pub use crate::build::{
     once, repeat, from_fn,
-    init_once, init_repeat, init_from_fn,
+    init, init_once, init_repeat, init_from_fn,
 };
 
 // Composition

@@ -31,6 +31,17 @@ pub trait Sans<I, O> {
     /// Process input, returning `Yield` to continue or `Return` to complete.
     fn next(&mut self, input: I) -> Step<O, Self::Return>;
 
+    /// Chain with a continuation created from this stage's return value.
+    ///
+    /// The function `f` receives the return value and must produce an [`InitSans`].
+    /// Use [`init()`](crate::build::init) to wrap a `Sans`:
+    ///
+    /// ```rust
+    /// use cont::prelude::*;
+    ///
+    /// let mut stage = once(|x: i32| x * 2)
+    ///     .and_then(|val| init(val, repeat(move |x| x + val)));
+    /// ```
     fn and_then<T, F>(self, f: F) -> AndThen<Self, T::Next, F>
     where
         Self: Sized + Sans<I, O, Return = I>,

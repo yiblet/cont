@@ -45,6 +45,7 @@
 //! **Building Stages:**
 //! - [`once(f)`](build::once) - Apply function once, then complete
 //! - [`repeat(f)`](build::repeat) - Apply function repeatedly
+//! - [`init(value, stage)`](build::init) - Wrap a `Sans` with an initial output (for `and_then`)
 //! - [`init_once(value, f)`](build::init_once) - Yield initial value, then apply function once
 //! - [`chain(a, b)`](compose::chain) - Run stage `a` to completion, then run stage `b`
 //!
