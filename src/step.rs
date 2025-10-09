@@ -1,3 +1,21 @@
+//! The result type for continuation steps.
+//!
+//! This module defines the [`Step`] enum, which represents the outcome of executing
+//! one step of a continuation. It's analogous to how `Option` represents optional values
+//! or `Result` represents fallible operations.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use cont::Step;
+//!
+//! // A computation that continues
+//! let continuing: Step<i32, String> = Step::Yielded(42);
+//!
+//! // A computation that completes
+//! let completed: Step<i32, String> = Step::Complete("done".to_string());
+//! ```
+
 /// Result of a computation step, either yielding a value to continue or completing with a final value.
 ///
 /// `Step` is the return type for continuation computations, similar to how `Option` represents

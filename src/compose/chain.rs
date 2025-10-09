@@ -1,3 +1,8 @@
+//! Chaining continuations sequentially.
+//!
+//! This module provides the [`Chain`] and [`AndThen`] combinators for running
+//! continuations one after another.
+
 use crate::{InitSans, Sans, step::Step};
 
 /// A continuation that runs one stage to completion, then uses its return value

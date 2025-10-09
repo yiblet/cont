@@ -1,3 +1,7 @@
+//! Function-based continuation builders.
+//!
+//! This module provides basic building blocks for creating continuations from functions.
+
 use crate::{Sans, step::Step};
 
 pub struct FromFn<F>(F);

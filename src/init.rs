@@ -1,3 +1,27 @@
+//! Continuations with initial output.
+//!
+//! This module defines the [`InitSans`] trait for continuations that can produce
+//! output immediately upon initialization, before receiving any input.
+//!
+//! # The InitSans Trait
+//!
+//! [`InitSans<I, O>`] represents a computation that:
+//! - Yields an initial output of type `O` before processing any input
+//! - Transitions to a [`Sans<I, O>`] continuation for subsequent processing
+//! - Can complete immediately without yielding if the computation finishes during init
+//!
+//! # Examples
+//!
+//! ```rust
+//! use cont::prelude::*;
+//!
+//! // Create a continuation with an initial value
+//! let stage = init_once(42, |x: i32| x + 1);
+//! let (initial, mut cont) = stage.init().unwrap_yielded();
+//! assert_eq!(initial, 42);
+//! assert_eq!(cont.next(10).unwrap_yielded(), 11);
+//! ```
+
 use crate::{
     Sans, Step,
     compose::{Chain, MapInput, MapReturn, MapYield, init_chain, init_map_input, init_map_yield, init_map_return},

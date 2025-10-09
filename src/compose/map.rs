@@ -1,3 +1,8 @@
+//! Transforming continuation inputs, outputs, and return values.
+//!
+//! This module provides [`MapInput`], [`MapYield`], and [`MapReturn`] combinators
+//! for adapting continuations to different types.
+
 use crate::{InitSans, Sans, step::Step};
 
 /// Transforms input before passing it to the wrapped stage.

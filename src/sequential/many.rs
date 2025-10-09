@@ -1,3 +1,8 @@
+//! Running multiple continuations sequentially.
+//!
+//! This module provides the [`Many`] combinator for executing an array of stages
+//! in sequence, passing each return value to the next stage.
+
 use crate::{Sans, Step};
 
 /// Run multiple stages sequentially, passing the return value of each to the next.

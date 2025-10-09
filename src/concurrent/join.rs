@@ -1,3 +1,8 @@
+//! Joining multiple continuations for concurrent execution.
+//!
+//! This module provides the [`Join`] combinator for running multiple continuations
+//! concurrently, polling them for outputs and directing inputs to specific stages.
+
 use crate::{InitSans, Sans, Step};
 use crate::poll::{poll, init_poll, Poll, PollOutput, PollError, Pollable};
 

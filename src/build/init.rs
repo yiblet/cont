@@ -1,3 +1,8 @@
+//! Builders for continuations with initial output.
+//!
+//! This module provides functions for creating [`InitSans`](crate::InitSans) continuations
+//! that yield an initial value before processing input.
+
 use crate::{Sans, Step};
 use super::func::{FromFn, Once, Repeat};
 

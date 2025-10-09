@@ -1,3 +1,27 @@
+//! Core trait for stateful continuations.
+//!
+//! This module defines the [`Sans`] trait, the fundamental building block for
+//! continuation-based programming in this library. A [`Sans`] represents a stateful
+//! computation that can process input values and yield intermediate results.
+//!
+//! # The Sans Trait
+//!
+//! [`Sans<I, O>`] represents a computation that:
+//! - Takes input of type `I`
+//! - Yields intermediate values of type `O`
+//! - Eventually completes with a final value of type `Return`
+//!
+//! # Examples
+//!
+//! ```rust
+//! use cont::prelude::*;
+//!
+//! // Create a continuation that processes one input then completes
+//! let mut stage = once(|x: i32| x * 2);
+//! assert_eq!(stage.next(5).unwrap_yielded(), 10);
+//! assert_eq!(stage.next(3).unwrap_complete(), 3);
+//! ```
+
 use std::{
     cell::RefCell,
     fmt,

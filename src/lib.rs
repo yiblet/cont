@@ -34,6 +34,7 @@
 //!
 //! - **[`build`]** - Creating new continuation stages
 //! - **[`compose`]** - Chaining and transforming continuations
+//! - **[`result`]** - Result combinators for error handling in continuations
 //! - **[`poll`]** - Universal adapter implementing both [`Sans`] and [`InitSans`] for bridging APIs
 //! - **[`concurrent`]** - Running multiple continuations concurrently
 //! - **[`sequential`]** - Running continuations one after another
@@ -61,6 +62,7 @@ mod init;
 // Capability modules
 pub mod build;
 pub mod compose;
+pub mod result;
 pub mod poll;
 pub mod concurrent;
 pub mod sequential;
