@@ -272,9 +272,9 @@ The library maintains as few dependencies as possible. Currently, cont only depe
 
 cont is `#![forbid(unsafe_code)]` - the entire library leverages Rust's type system and ownership model to provide safe abstractions. This ensures memory safety and prevents undefined behavior without sacrificing performance.
 
-### Generator Compatibility
+### Coroutine Compatibility
 
-The library's design stays similar to Rust's [nightly generator syntax](https://doc.rust-lang.org/beta/unstable-book/language-features/generators.html) and semantics. This intentional alignment means that when generators stabilize, cont can potentially interoperate with native generator syntax, providing a migration path and compatibility layer.
+The library's design stays similar to Rust's [nightly coroutine syntax](https://doc.rust-lang.org/beta/unstable-book/language-features/coroutines.html) and semantics. This intentional alignment means that when coroutines stabilize, cont can potentially interoperate with native coroutine syntax, providing a migration path and compatibility layer.
 
 ### Stable Rust Only
 
