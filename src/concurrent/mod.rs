@@ -5,4 +5,4 @@
 mod join;
 
 // Re-export concurrent operations
-pub use join::{join, join_vec, init_join, init_join_vec, Join, JoinVec, JoinEnvelope, JoinError};
+pub use join::{join, join_vec, init_join, init_join_vec, Join, JoinVec, JoinEnvelope, JoinError, JoinId};

@@ -23,8 +23,8 @@ use crate::poll::{poll, init_poll, Poll, PollOutput, PollError, Pollable};
 ///
 /// // Poll to get initial outputs
 /// match joined.next(Poll::Poll) {
-///     Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {
-///         assert!(val == 100 || val == 200);
+///     Step::Yielded(PollOutput::Output(env)) => {
+///         assert!(*env.value() == 100 || *env.value() == 200);
 ///     }
 ///     _ => panic!("Expected output"),
 /// }
@@ -63,8 +63,10 @@ where
 /// let mut joined = join([stage1, stage2]);
 ///
 /// // Send input to first stage
-/// match joined.next(Poll::Input(JoinEnvelope(0, 10))) {
-///     Step::Yielded(PollOutput::Output(JoinEnvelope(0, 11))) => {}
+/// match joined.next(Poll::Input(JoinEnvelope::new(0, 10))) {
+///     Step::Yielded(PollOutput::Output(env)) => {
+///         assert_eq!(*env.value(), 11);
+///     }
 ///     _ => panic!("Expected output from stage 0"),
 /// }
 /// ```
@@ -143,14 +145,14 @@ pub struct JoinVec<S, O, R> {
 #[derive(Debug)]
 pub enum JoinError {
     /// A pollable stage failed with the given index and error.
-    PollableFailed(usize, PollError),
+    PollableFailed(JoinId, PollError),
 }
 
 impl std::fmt::Display for JoinError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JoinError::PollableFailed(idx, err) => {
-                write!(f, "pollable at index {} failed: {}", idx, err)
+            JoinError::PollableFailed(id, err) => {
+                write!(f, "pollable at index {} failed: {}", id.as_usize(), err)
             }
         }
     }
@@ -158,15 +160,41 @@ impl std::fmt::Display for JoinError {
 
 impl std::error::Error for JoinError {}
 
+/// Identifier for a stage in a [`Join`] operation.
+///
+/// This is a type-safe wrapper around a stage index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct JoinId(usize);
+
+impl JoinId {
+    pub(crate) fn new(index: usize) -> Self {
+        JoinId(index)
+    }
+
+    pub(crate) fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
 /// Wraps values with a stage index for routing in [`Join`] operations.
 ///
 /// The first field is the stage index, the second is the wrapped value.
 ///
 /// Implements `Deref` to access the inner value conveniently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct JoinEnvelope<T>(pub usize, pub T);
+pub struct JoinEnvelope<T>(pub JoinId, pub T);
 
 impl<T> JoinEnvelope<T> {
+    /// Creates a new `JoinEnvelope` with the given index and value.
+    pub fn new(index: usize, value: T) -> Self {
+        JoinEnvelope(JoinId::new(index), value)
+    }
+
+    /// Returns a reference to the wrapped value.
+    pub fn value(&self) -> &T {
+        &self.1
+    }
+
     pub fn map<U, F>(self, f: F) -> JoinEnvelope<U>
     where
         F: FnOnce(T) -> U,
@@ -200,7 +228,7 @@ where
                         match pollable.next(Poll::Poll) {
                             Step::Yielded(PollOutput::Output(o)) => {
                                 self.last_index = idx;
-                                return Step::Yielded(PollOutput::Output(JoinEnvelope(idx, o)));
+                                return Step::Yielded(PollOutput::Output(JoinEnvelope(JoinId::new(idx), o)));
                             }
                             Step::Yielded(PollOutput::NeedsInput) => continue,
                             Step::Yielded(PollOutput::Complete) => {
@@ -227,7 +255,7 @@ where
                                 continue;
                             }
                             Step::Complete(Err(e)) => {
-                                return Step::Complete(Err(JoinError::PollableFailed(idx, e)));
+                                return Step::Complete(Err(JoinError::PollableFailed(JoinId::new(idx), e)));
                             }
                         }
                     }
@@ -246,14 +274,15 @@ where
                 Step::Yielded(PollOutput::NeedsInput)
             }
 
-            Poll::Input(JoinEnvelope(idx, input)) => {
+            Poll::Input(JoinEnvelope(id, input)) => {
+                let idx = id.as_usize();
                 if let Some(pollable) = self.pollables.get_mut(idx) {
                     match pollable.next(Poll::Input(input)) {
                         Step::Yielded(PollOutput::Output(o)) => {
-                            Step::Yielded(PollOutput::Output(JoinEnvelope(idx, o)))
+                            Step::Yielded(PollOutput::Output(JoinEnvelope(id, o)))
                         }
                         Step::Yielded(PollOutput::NeedsPoll(i2)) => {
-                            Step::Yielded(PollOutput::NeedsPoll(JoinEnvelope(idx, i2)))
+                            Step::Yielded(PollOutput::NeedsPoll(JoinEnvelope(id, i2)))
                         }
                         Step::Yielded(PollOutput::NeedsInput) => {
                             Step::Yielded(PollOutput::NeedsInput)
@@ -277,7 +306,7 @@ where
                             Step::Yielded(PollOutput::NeedsInput)
                         }
                         Step::Complete(Err(e)) => {
-                            Step::Complete(Err(JoinError::PollableFailed(idx, e)))
+                            Step::Complete(Err(JoinError::PollableFailed(id, e)))
                         }
                     }
                 } else {
@@ -330,7 +359,7 @@ where
                         match pollable.next(Poll::Poll) {
                             Step::Yielded(PollOutput::Output(o)) => {
                                 self.last_index = idx;
-                                return Step::Yielded(PollOutput::Output(JoinEnvelope(idx, o)));
+                                return Step::Yielded(PollOutput::Output(JoinEnvelope(JoinId::new(idx), o)));
                             }
                             Step::Yielded(PollOutput::NeedsInput) => continue,
                             Step::Yielded(PollOutput::Complete) => continue,
@@ -351,7 +380,7 @@ where
                                 continue;
                             }
                             Step::Complete(Err(e)) => {
-                                return Step::Complete(Err(JoinError::PollableFailed(idx, e)));
+                                return Step::Complete(Err(JoinError::PollableFailed(JoinId::new(idx), e)));
                             }
                         }
                     }
@@ -370,14 +399,15 @@ where
                 Step::Yielded(PollOutput::NeedsInput)
             }
 
-            Poll::Input(JoinEnvelope(idx, input)) => {
+            Poll::Input(JoinEnvelope(id, input)) => {
+                let idx = id.as_usize();
                 if let Some(pollable) = self.pollables.get_mut(idx) {
                     match pollable.next(Poll::Input(input)) {
                         Step::Yielded(PollOutput::Output(o)) => {
-                            Step::Yielded(PollOutput::Output(JoinEnvelope(idx, o)))
+                            Step::Yielded(PollOutput::Output(JoinEnvelope(id, o)))
                         }
                         Step::Yielded(PollOutput::NeedsPoll(i2)) => {
-                            Step::Yielded(PollOutput::NeedsPoll(JoinEnvelope(idx, i2)))
+                            Step::Yielded(PollOutput::NeedsPoll(JoinEnvelope(id, i2)))
                         }
                         Step::Yielded(PollOutput::NeedsInput) => {
                             Step::Yielded(PollOutput::NeedsInput)
@@ -400,7 +430,7 @@ where
                             Step::Yielded(PollOutput::NeedsInput)
                         }
                         Step::Complete(Err(e)) => {
-                            Step::Complete(Err(JoinError::PollableFailed(idx, e)))
+                            Step::Complete(Err(JoinError::PollableFailed(id, e)))
                         }
                     }
                 } else {
@@ -453,15 +483,15 @@ mod tests {
         }
 
         // Send input to first sans
-        match joined.next(Poll::Input(JoinEnvelope(0, 10))) {
-            Step::Yielded(PollOutput::Output(JoinEnvelope(0, 11))) => {}
-            other => panic!("Expected Output(JoinEnvelope(0, 11)), got {:?}", other),
+        match joined.next(Poll::Input(JoinEnvelope::new(0,10))) {
+            Step::Yielded(PollOutput::Output(JoinEnvelope(_, 11))) => {}
+            other => panic!("Expected Output(JoinEnvelope(_, 11)), got {:?}", other),
         }
 
         // Send input to second sans
-        match joined.next(Poll::Input(JoinEnvelope(1, 5))) {
-            Step::Yielded(PollOutput::Output(JoinEnvelope(1, 6))) => {}
-            other => panic!("Expected Output(JoinEnvelope(1, 6)), got {:?}", other),
+        match joined.next(Poll::Input(JoinEnvelope::new(1,5))) {
+            Step::Yielded(PollOutput::Output(JoinEnvelope(_, 6))) => {}
+            other => panic!("Expected Output(JoinEnvelope(_, 6)), got {:?}", other),
         }
     }
 
@@ -473,19 +503,19 @@ mod tests {
         let mut joined = join([s1, s2]);
 
         // Send inputs to both - they produce outputs directly (repeat always yields)
-        match joined.next(Poll::Input(JoinEnvelope(0, 10))) {
-            Step::Yielded(PollOutput::Output(JoinEnvelope(0, 11))) => {}
+        match joined.next(Poll::Input(JoinEnvelope::new(0,10))) {
+            Step::Yielded(PollOutput::Output(JoinEnvelope(_, 11))) => {}
             other => panic!("Expected Output, got {:?}", other),
         }
 
-        match joined.next(Poll::Input(JoinEnvelope(1, 5))) {
-            Step::Yielded(PollOutput::Output(JoinEnvelope(1, 6))) => {}
+        match joined.next(Poll::Input(JoinEnvelope::new(1,5))) {
+            Step::Yielded(PollOutput::Output(JoinEnvelope(_, 6))) => {}
             other => panic!("Expected Output, got {:?}", other),
         }
 
         // Send more inputs
-        match joined.next(Poll::Input(JoinEnvelope(0, 20))) {
-            Step::Yielded(PollOutput::Output(JoinEnvelope(0, 21))) => {}
+        match joined.next(Poll::Input(JoinEnvelope::new(0,20))) {
+            Step::Yielded(PollOutput::Output(JoinEnvelope(_, 21))) => {}
             other => panic!("Expected Output, got {:?}", other),
         }
     }
@@ -497,13 +527,13 @@ mod tests {
         let mut joined = join([s1]);
 
         // Send input - once yields first
-        match joined.next(Poll::Input(JoinEnvelope(0, 10))) {
-            Step::Yielded(PollOutput::Output(JoinEnvelope(0, 11))) => {}
+        match joined.next(Poll::Input(JoinEnvelope::new(0,10))) {
+            Step::Yielded(PollOutput::Output(JoinEnvelope(_, 11))) => {}
             other => panic!("Expected Output, got {:?}", other),
         }
 
         // Send another input to complete
-        match joined.next(Poll::Input(JoinEnvelope(0, 99))) {
+        match joined.next(Poll::Input(JoinEnvelope::new(0,99))) {
             Step::Complete(Ok([99])) => {}
             other => panic!("Expected Complete(Ok([99])), got {:?}", other),
         }
@@ -518,16 +548,16 @@ mod tests {
         let mut joined = join([s1, s2, s3]);
 
         // Send inputs to all - they yield outputs first
-        joined.next(Poll::Input(JoinEnvelope(0, 10))).expect_yielded("should yield");
-        joined.next(Poll::Input(JoinEnvelope(1, 5))).expect_yielded("should yield");
-        joined.next(Poll::Input(JoinEnvelope(2, 20))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(0,10))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(1,5))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(2,20))).expect_yielded("should yield");
 
         // Send second inputs to complete each
-        joined.next(Poll::Input(JoinEnvelope(0, 100))).expect_yielded("should yield");
-        joined.next(Poll::Input(JoinEnvelope(1, 200))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(0,100))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(1,200))).expect_yielded("should yield");
 
         // Final completion
-        match joined.next(Poll::Input(JoinEnvelope(2, 300))) {
+        match joined.next(Poll::Input(JoinEnvelope::new(2,300))) {
             Step::Complete(Ok(results)) => {
                 assert_eq!(results, [100, 200, 300]);
             }
@@ -543,13 +573,13 @@ mod tests {
         let mut joined = join([s1, s2]);
 
         // Send inputs out of order - they yield first
-        joined.next(Poll::Input(JoinEnvelope(1, 5))).expect_yielded("should yield");
-        joined.next(Poll::Input(JoinEnvelope(0, 10))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(1,5))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(0,10))).expect_yielded("should yield");
 
         // Complete them
-        joined.next(Poll::Input(JoinEnvelope(1, 100))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(1,100))).expect_yielded("should yield");
 
-        match joined.next(Poll::Input(JoinEnvelope(0, 200))) {
+        match joined.next(Poll::Input(JoinEnvelope::new(0,200))) {
             Step::Complete(Ok(results)) => {
                 assert_eq!(results, [200, 100]);
             }
@@ -566,8 +596,8 @@ mod tests {
 
         // Interleave operations on both sans
         for i in 0..3 {
-            joined.next(Poll::Input(JoinEnvelope(0, i))).expect_yielded("should yield");
-            joined.next(Poll::Input(JoinEnvelope(1, i))).expect_yielded("should yield");
+            joined.next(Poll::Input(JoinEnvelope::new(0,i))).expect_yielded("should yield");
+            joined.next(Poll::Input(JoinEnvelope::new(1,i))).expect_yielded("should yield");
         }
 
         // Should still be running
@@ -585,8 +615,8 @@ mod tests {
 
         // Send inputs continuously
         for i in 1..=5 {
-            match joined.next(Poll::Input(JoinEnvelope(0, i))) {
-                Step::Yielded(PollOutput::Output(JoinEnvelope(0, output))) => {
+            match joined.next(Poll::Input(JoinEnvelope::new(0,i))) {
+                Step::Yielded(PollOutput::Output(JoinEnvelope(_, output))) => {
                     assert_eq!(output, i + 1);
                 }
                 other => panic!("Expected Output, got {:?}", other),
@@ -616,14 +646,14 @@ mod tests {
         let mut joined = join([s1, s2]);
 
         // First inputs yield outputs
-        joined.next(Poll::Input(JoinEnvelope(0, 10))).expect_yielded("should yield");
-        joined.next(Poll::Input(JoinEnvelope(1, 5))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(0,10))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(1,5))).expect_yielded("should yield");
 
         // Complete both
-        joined.next(Poll::Input(JoinEnvelope(0, 100))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(0,100))).expect_yielded("should yield");
 
         // Last completion
-        match joined.next(Poll::Input(JoinEnvelope(1, 200))) {
+        match joined.next(Poll::Input(JoinEnvelope::new(1,200))) {
             Step::Complete(Ok(results)) => {
                 assert_eq!(results, [100, 200]);
             }
@@ -641,7 +671,8 @@ mod tests {
 
         // Should have initial outputs available
         match joined.next(Poll::Poll) {
-            Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {
+            Step::Yielded(PollOutput::Output(JoinEnvelope(id, val))) => {
+                let idx = id.as_usize();
                 assert!(idx == 0 || idx == 1);
                 assert!(val == 100 || val == 200);
             }
@@ -680,9 +711,9 @@ mod tests {
         // Send input to each sans
         for i in 0..3 {
             let input_val = (i * 10) as i32;
-            match joined.next(Poll::Input(JoinEnvelope(i, input_val))) {
-                Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {
-                    assert_eq!(idx, i);
+            match joined.next(Poll::Input(JoinEnvelope::new(i,input_val))) {
+                Step::Yielded(PollOutput::Output(JoinEnvelope(id, val))) => {
+                    assert_eq!(id.as_usize(), i);
                     assert_eq!(val, input_val + 1);
                 }
                 other => panic!("Expected Output, got {:?}", other),
@@ -697,14 +728,14 @@ mod tests {
         let mut joined = join_vec(sans);
 
         // First inputs yield
-        joined.next(Poll::Input(JoinEnvelope(0, 10))).expect_yielded("should yield");
-        joined.next(Poll::Input(JoinEnvelope(1, 20))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(0,10))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(1,20))).expect_yielded("should yield");
 
         // Complete both
-        joined.next(Poll::Input(JoinEnvelope(0, 100))).expect_yielded("should yield");
+        joined.next(Poll::Input(JoinEnvelope::new(0,100))).expect_yielded("should yield");
 
         // Final completion
-        match joined.next(Poll::Input(JoinEnvelope(1, 200))) {
+        match joined.next(Poll::Input(JoinEnvelope::new(1,200))) {
             Step::Complete(Ok(results)) => {
                 assert_eq!(results, vec![100, 200]);
             }
@@ -740,9 +771,9 @@ mod tests {
             // Send input to all
             for i in 0..size {
                 let input_val = (i * 5) as i32;
-                match joined.next(Poll::Input(JoinEnvelope(i, input_val))) {
-                    Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {
-                        assert_eq!(idx, i);
+                match joined.next(Poll::Input(JoinEnvelope::new(i,input_val))) {
+                    Step::Yielded(PollOutput::Output(JoinEnvelope(id, val))) => {
+                        assert_eq!(id.as_usize(), i);
                         assert_eq!(val, input_val + 1);
                     }
                     other => panic!("Expected Output at index {}, got {:?}", i, other),
@@ -765,7 +796,8 @@ mod tests {
         let mut found = [false, false, false];
         for _ in 0..3 {
             match joined.next(Poll::Poll) {
-                Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {
+                Step::Yielded(PollOutput::Output(JoinEnvelope(id, val))) => {
+                    let idx = id.as_usize();
                     assert!(idx < 3);
                     found[idx] = true;
                     assert!(val == 100 || val == 200 || val == 300);
@@ -786,9 +818,9 @@ mod tests {
         for round in 0..3 {
             for idx in 0..2 {
                 let input_val = (round * 10 + idx) as i32;
-                match joined.next(Poll::Input(JoinEnvelope(idx, input_val))) {
-                    Step::Yielded(PollOutput::Output(JoinEnvelope(i, val))) => {
-                        assert_eq!(i, idx);
+                match joined.next(Poll::Input(JoinEnvelope::new(idx,input_val))) {
+                    Step::Yielded(PollOutput::Output(JoinEnvelope(id, val))) => {
+                        assert_eq!(id.as_usize(), idx);
                         assert_eq!(val, input_val + 1);
                     }
                     other => panic!("Expected Output, got {:?}", other),
@@ -806,9 +838,9 @@ mod tests {
         // Send input to first 10
         for i in 0..10 {
             let input_val = i as i32;
-            match joined.next(Poll::Input(JoinEnvelope(i, input_val))) {
-                Step::Yielded(PollOutput::Output(JoinEnvelope(idx, val))) => {
-                    assert_eq!(idx, i);
+            match joined.next(Poll::Input(JoinEnvelope::new(i,input_val))) {
+                Step::Yielded(PollOutput::Output(JoinEnvelope(id, val))) => {
+                    assert_eq!(id.as_usize(), i);
                     assert_eq!(val, input_val * 2);
                 }
                 other => panic!("Expected Output, got {:?}", other),
