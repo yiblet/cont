@@ -217,7 +217,7 @@ cont is organized by **capability** - what you want to accomplish:
 | Module | Purpose | Key Functions |
 |--------|---------|---------------|
 | **`cont::build`** | Creating continuation stages | `once`, `repeat`, `from_fn`, `init_once`, `init_repeat` |
-| **`cont::compose`** | Combining continuations | `chain`, `init_chain`, `map_input`, `map_yield`, `map_return` |
+| **`cont::compose`** | Combining continuations | `chain`, `map_input`, `map_yield`, `map_return` |
 | **`cont::concurrent`** | Concurrent execution | `poll`, `join`, `join_vec` |
 | **`cont::sequential`** | Sequential execution | `many` |
 | **`cont::run`** | Executing pipelines | `handle`, `handle_async` |

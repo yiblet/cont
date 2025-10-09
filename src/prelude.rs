@@ -12,7 +12,7 @@ pub use crate::build::{
 };
 
 // Composition
-pub use crate::compose::{chain, init_chain};
+pub use crate::compose::chain;
 
 // Transformations
 pub use crate::compose::{map_input, map_yield, map_return};

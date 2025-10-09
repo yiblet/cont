@@ -164,18 +164,6 @@ where
         }
     }
 }
-
-/// Chain an `InitSans` stage with a continuation.
-///
-/// Allows connecting stages that have initial yields with regular continuations.
-pub fn init_chain<I, O, L, R>(first: (O, L), r: R) -> (O, Chain<L, R>)
-where
-    L: Sans<I, O, Return = I>,
-    R: Sans<I, O>,
-{
-    (first.0, chain(first.1, r))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,39 +271,6 @@ mod tests {
         // Second continues: 20 + 12 = 32
         assert_eq!(stage.next(20).unwrap_yielded(), 32);
         // Second completes with 7
-        assert_eq!(stage.next(7).unwrap_complete(), 7);
-    }
-
-    #[test]
-    fn test_init_chain_basic() {
-        // init_chain takes an InitSans (tuple with initial output) and chains it with another stage
-        let init = (100, once(|x: i32| x + 1));
-        let second = repeat(|x: i32| x * 2);
-
-        let (initial_output, mut stage) = init_chain(init, second);
-
-        assert_eq!(initial_output, 100);
-        // First stage: 5 + 1 = 6, completes with 6
-        assert_eq!(stage.next(5).unwrap_yielded(), 6);
-        // Second stage: 6 * 2 = 12
-        assert_eq!(stage.next(6).unwrap_yielded(), 12);
-        // Continue with second stage
-        assert_eq!(stage.next(10).unwrap_yielded(), 20);
-    }
-
-    #[test]
-    fn test_init_chain_propagates_return() {
-        let init = (42, once(|x: i32| x + 1));
-        let second = once(|x: i32| x * 2);
-
-        let (initial, mut stage) = init_chain(init, second);
-
-        assert_eq!(initial, 42);
-        // First: 5 + 1 = 6
-        assert_eq!(stage.next(5).unwrap_yielded(), 6);
-        // Second: 6 * 2 = 12
-        assert_eq!(stage.next(6).unwrap_yielded(), 12);
-        // Second completes
         assert_eq!(stage.next(7).unwrap_complete(), 7);
     }
 }
