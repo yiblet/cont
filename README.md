@@ -1,6 +1,7 @@
 # sans, composable coroutine-based programming
 
 [![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Build Status](https://github.com/yiblet/sans/actions/workflows/ci.yml/badge.svg)](https://github.com/yiblet/sans/actions/workflows/ci.yml)
 [![crates.io Version](https://img.shields.io/crates/v/sans.svg)](https://crates.io/crates/sans)
 [![Minimum rustc version](https://img.shields.io/badge/rustc-1.85.0+-lightgray.svg)](#rust-version-requirements-msrv)
 
@@ -84,7 +85,7 @@ println!("{}", result);  // "Result: 45"
 ## Documentation
 
 - [API Documentation](https://docs.rs/sans)
-- [Examples directory](https://github.com/your-repo/sans/tree/main/examples) *(coming soon)*
+- [Examples directory](https://github.com/yiblet/sans/tree/main/examples) *(coming soon)*
 
 ## Why use sans?
 
