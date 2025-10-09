@@ -2,6 +2,13 @@
 name = "sans"
 version = "0.1.0-alpha.3"
 edition = "2024"
+rust-version = "1.85.0"
+description = "Composable coroutine-based programming library for sans-io"
+license = "MIT"
+repository = "https://github.com/yiblet/sans"
+documentation = "https://docs.rs/sans"
+readme = "README.md"
+keywords = ["coroutine", "yield", "sans-io", "async"]
 
 [dependencies]
 either = "1"
