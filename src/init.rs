@@ -24,8 +24,11 @@
 
 use crate::{
     Sans, Step,
-    compose::{Chain, MapInput, MapReturn, MapYield, init_chain, init_map_input, init_map_yield, init_map_return},
     build::{Once, Repeat, once, repeat},
+    compose::{
+        Chain, MapInput, MapReturn, MapYield, init_chain, init_map_input, init_map_return,
+        init_map_yield,
+    },
     iter::InitSansIter,
 };
 
@@ -279,8 +282,10 @@ mod tests {
     #[test]
     fn test_either_first_right_branch_selected() {
         #[allow(clippy::type_complexity)]
-        let stage: either::Either<(i32, Repeat<fn(i32) -> i32>), (i32, Repeat<fn(i32) -> i32>)> =
-            either::Either::Right(init_repeat(2_i32, add_three));
+        let stage: either::Either<
+            (i32, Repeat<fn(i32) -> i32>),
+            (i32, Repeat<fn(i32) -> i32>),
+        > = either::Either::Right(init_repeat(2_i32, add_three));
 
         let (first_value, mut next_stage) = stage.init().unwrap_yielded();
         assert_eq!(2, first_value);

@@ -31,8 +31,8 @@ use std::{
 
 use crate::{
     InitSans,
-    compose::{AndThen, Chain, MapInput, MapReturn, MapYield, and_then, chain},
     build::{Once, Repeat, once, repeat},
+    compose::{AndThen, Chain, MapInput, MapReturn, MapYield, and_then, chain},
     iter::SansIter,
     step::Step,
 };

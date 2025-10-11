@@ -61,9 +61,13 @@ where
 
     fn init(self) -> Step<(O, Self::Next), <S::Next as Sans<I2, O>>::Return> {
         match self.stage.init() {
-            Step::Yielded((o, next)) => {
-                Step::Yielded((o, MapInput { f: self.f, stage: next }))
-            }
+            Step::Yielded((o, next)) => Step::Yielded((
+                o,
+                MapInput {
+                    f: self.f,
+                    stage: next,
+                },
+            )),
             Step::Complete(d) => Step::Complete(d),
         }
     }
@@ -95,7 +99,11 @@ where
     S: Sans<I, O1>,
     F: FnMut(O1) -> O2,
 {
-    MapYield { f, stage, _phantom: std::marker::PhantomData }
+    MapYield {
+        f,
+        stage,
+        _phantom: std::marker::PhantomData,
+    }
 }
 
 /// Create a MapYield from an InitSans stage.
@@ -106,7 +114,11 @@ where
     S: InitSans<I, O1>,
     F: FnMut(O1) -> O2,
 {
-    MapYield { f, stage, _phantom: std::marker::PhantomData }
+    MapYield {
+        f,
+        stage,
+        _phantom: std::marker::PhantomData,
+    }
 }
 
 impl<I, O1, O2, S, F> Sans<I, O2> for MapYield<S, F, I, O1>
@@ -135,7 +147,14 @@ where
             Step::Yielded((o1, next)) => {
                 let mut f = self.f;
                 let o2 = f(o1);
-                Step::Yielded((o2, MapYield { f, stage: next, _phantom: std::marker::PhantomData }))
+                Step::Yielded((
+                    o2,
+                    MapYield {
+                        f,
+                        stage: next,
+                        _phantom: std::marker::PhantomData,
+                    },
+                ))
             }
             Step::Complete(d) => Step::Complete(d),
         }
@@ -205,9 +224,13 @@ where
 
     fn init(self) -> Step<(O, Self::Next), D2> {
         match self.stage.init() {
-            Step::Yielded((o, next)) => {
-                Step::Yielded((o, MapReturn { f: self.f, stage: next }))
-            }
+            Step::Yielded((o, next)) => Step::Yielded((
+                o,
+                MapReturn {
+                    f: self.f,
+                    stage: next,
+                },
+            )),
             Step::Complete(d1) => {
                 let mut f = self.f;
                 Step::Complete(f(d1))
@@ -219,31 +242,34 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::build::repeat;
     use crate::InitSans;
+    use crate::build::repeat;
 
     #[test]
     fn test_map_input_and_map_yield_pipeline() {
         let mut total = 0_i64;
-        let init_stage = (0_i64, repeat(move |delta: i64| {
-            total += delta;
-            total
-        }))
-        .map_input(|cmd: &str| -> i64 {
-            let mut parts = cmd.split_whitespace();
-            let op = parts.next().expect("operation must exist");
-            let amount: i64 = parts
-                .next()
-                .expect("amount must exist")
-                .parse()
-                .expect("amount must parse");
-            match op {
-                "add" => amount,
-                "sub" => -amount,
-                _ => panic!("unsupported op: {op}"),
-            }
-        })
-        .map_yield(|value: i64| format!("total={value}"));
+        let init_stage = (
+            0_i64,
+            repeat(move |delta: i64| {
+                total += delta;
+                total
+            }),
+        )
+            .map_input(|cmd: &str| -> i64 {
+                let mut parts = cmd.split_whitespace();
+                let op = parts.next().expect("operation must exist");
+                let amount: i64 = parts
+                    .next()
+                    .expect("amount must exist")
+                    .parse()
+                    .expect("amount must parse");
+                match op {
+                    "add" => amount,
+                    "sub" => -amount,
+                    _ => panic!("unsupported op: {op}"),
+                }
+            })
+            .map_yield(|value: i64| format!("total={value}"));
 
         let (initial_total, mut stage) = init_stage.init().unwrap_yielded();
 
@@ -391,10 +417,7 @@ mod tests {
         use crate::build::repeat;
         let stage = repeat(|x: i32| x + 1);
         // Double map_input: String -> usize (len) -> i32
-        let mut mapped = map_input(
-            |s: String| s.len(),
-            map_input(|n: usize| n as i32, stage),
-        );
+        let mut mapped = map_input(|s: String| s.len(), map_input(|n: usize| n as i32, stage));
 
         // Input "hello" -> len=5 -> 5 + 1 = 6
         assert_eq!(mapped.next("hello".to_string()).unwrap_yielded(), 6);

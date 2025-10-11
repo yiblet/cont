@@ -128,7 +128,10 @@ where
 /// Async version of `handle`.
 ///
 /// Works with responder functions that return futures.
-pub async fn handle_async<S, I, O, R, Fut>(stage: S, responder: R) -> <S::Next as Sans<I, O>>::Return
+pub async fn handle_async<S, I, O, R, Fut>(
+    stage: S,
+    responder: R,
+) -> <S::Next as Sans<I, O>>::Return
 where
     S: InitSans<I, O>,
     S::Next: Sans<I, O>,
@@ -141,7 +144,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{compose::chain, build::{init_once, once}};
+    use crate::{
+        build::{init_once, once},
+        compose::chain,
+    };
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::future::{Future, ready};

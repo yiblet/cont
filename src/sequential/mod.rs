@@ -5,4 +5,4 @@
 mod many;
 
 // Re-export sequential operations
-pub use many::{many, Many};
+pub use many::{Many, many};

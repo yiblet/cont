@@ -6,5 +6,5 @@ mod func;
 mod init;
 
 // Re-export building blocks
-pub use func::{once, repeat, from_fn, Once, Repeat, FromFn};
-pub use init::{init, init_once, init_repeat, init_from_fn};
+pub use func::{FromFn, Once, Repeat, from_fn, once, repeat};
+pub use init::{init, init_from_fn, init_once, init_repeat};

@@ -3,8 +3,8 @@
 //! This module provides functions for creating [`InitSans`](crate::InitSans) coroutines
 //! that yield an initial value before processing input.
 
-use crate::{Sans, Step};
 use super::func::{FromFn, Once, Repeat};
+use crate::{Sans, Step};
 
 /// Create an `InitSans` by pairing an initial output with a continuation.
 ///

@@ -39,6 +39,7 @@
 //! - **[`concurrent`]** - Running multiple coroutines concurrently
 //! - **[`sequential`]** - Running coroutines one after another
 //! - **[`run`]** - Executing coroutine pipelines
+//! - **[`iter`]** - Iterator adapters for [`Sans<(), O>`] and [`InitSans<(), O>`]
 //! - **[`prelude`]** - Common imports for quick start
 //!
 //! ## Common Functions
@@ -55,23 +56,24 @@
 //! - [`handle_async(stage, responder)`](run::handle_async) - Drive computation with async responses
 
 // Core modules (essential types)
-mod step;
-mod sans;
 mod init;
+mod sans;
+mod step;
 
 // Capability modules
 pub mod build;
 pub mod compose;
-pub mod result;
-pub mod poll;
 pub mod concurrent;
-pub mod sequential;
+pub mod iter;
+pub mod poll;
+pub mod result;
 pub mod run;
+pub mod sequential;
 
 // Convenience
 pub mod prelude;
 
 // Re-export essential types at root
-pub use step::Step;
-pub use sans::{Sans, PoisonError};
 pub use init::InitSans;
+pub use sans::{PoisonError, Sans};
+pub use step::Step;

@@ -290,7 +290,9 @@ mod tests {
         pollable.next(Poll::Input(5)).expect_yielded("should yield");
 
         // Send another input to complete
-        let _ = pollable.next(Poll::Input(10)).expect_complete("should complete");
+        let _ = pollable
+            .next(Poll::Input(10))
+            .expect_complete("should complete");
 
         // Try to poll after completion
         match pollable.next(Poll::Poll) {
@@ -357,7 +359,10 @@ mod tests {
 
         for i in 1..=5 {
             // Poll
-            assert!(matches!(pollable.next(Poll::Poll), Step::Yielded(PollOutput::NeedsInput)));
+            assert!(matches!(
+                pollable.next(Poll::Poll),
+                Step::Yielded(PollOutput::NeedsInput)
+            ));
 
             // Input
             match pollable.next(Poll::Input(i)) {

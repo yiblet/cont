@@ -91,7 +91,9 @@ mod tests {
     #[test]
     fn test_many_single_stage() {
         // Single stage: yields once, completes with next input
-        fn add_ten(x: i32) -> i32 { x + 10 }
+        fn add_ten(x: i32) -> i32 {
+            x + 10
+        }
         let mut stage = many([once(add_ten)]);
 
         // First input: yields 5 + 10 = 15
@@ -104,8 +106,12 @@ mod tests {
     fn test_many_two_stages() {
         // Two stages chained: first yields, completes, then second yields, completes
         // Need to use function pointers to make types match
-        fn add_ten(x: i32) -> i32 { x + 10 }
-        fn mul_two(x: i32) -> i32 { x * 2 }
+        fn add_ten(x: i32) -> i32 {
+            x + 10
+        }
+        fn mul_two(x: i32) -> i32 {
+            x * 2
+        }
         let mut stage = many([
             once(add_ten as fn(i32) -> i32),
             once(mul_two as fn(i32) -> i32),
@@ -123,9 +129,15 @@ mod tests {
     #[test]
     fn test_many_three_stages() {
         // Three stages: add 10, multiply by 2, add 100
-        fn add_ten(x: i32) -> i32 { x + 10 }
-        fn mul_two(x: i32) -> i32 { x * 2 }
-        fn add_hundred(x: i32) -> i32 { x + 100 }
+        fn add_ten(x: i32) -> i32 {
+            x + 10
+        }
+        fn mul_two(x: i32) -> i32 {
+            x * 2
+        }
+        fn add_hundred(x: i32) -> i32 {
+            x + 100
+        }
         let mut stage = many([
             once(add_ten as fn(i32) -> i32),
             once(mul_two as fn(i32) -> i32),
@@ -145,8 +157,12 @@ mod tests {
     #[test]
     fn test_many_passes_return_to_next_stage() {
         // Verify that the return value of one stage becomes input to next
-        fn add_one(x: i32) -> i32 { x + 1 }
-        fn mul_ten(x: i32) -> i32 { x * 10 }
+        fn add_one(x: i32) -> i32 {
+            x + 1
+        }
+        fn mul_ten(x: i32) -> i32 {
+            x * 10
+        }
         let mut stage = many([
             once(add_one as fn(i32) -> i32),
             once(mul_ten as fn(i32) -> i32),
@@ -164,18 +180,14 @@ mod tests {
     #[test]
     fn test_many_large_array() {
         // Test with 5 stages
-        fn add_one(x: i32) -> i32 { x + 1 }
+        fn add_one(x: i32) -> i32 {
+            x + 1
+        }
         let f = add_one as fn(i32) -> i32;
-        let mut stage = many([
-            once(f),
-            once(f),
-            once(f),
-            once(f),
-            once(f),
-        ]);
+        let mut stage = many([once(f), once(f), once(f), once(f), once(f)]);
 
         // Each stage yields x+1, then completes with next input
-        assert_eq!(stage.next(0).unwrap_yielded(), 1);   // 0+1
+        assert_eq!(stage.next(0).unwrap_yielded(), 1); // 0+1
         assert_eq!(stage.next(10).unwrap_yielded(), 11); // 10+1
         assert_eq!(stage.next(20).unwrap_yielded(), 21); // 20+1
         assert_eq!(stage.next(30).unwrap_yielded(), 31); // 30+1

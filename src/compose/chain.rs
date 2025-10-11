@@ -195,14 +195,10 @@ where
             Step::Yielded((o, next)) => {
                 Step::Yielded((o, either::Either::Left(Chain(Some(next), self.1))))
             }
-            Step::Complete(d) => {
-                match self.1.next(d) {
-                    Step::Yielded(o) => {
-                        Step::Yielded((o, either::Either::Right(self.1)))
-                    }
-                    Step::Complete(r) => Step::Complete(r),
-                }
-            }
+            Step::Complete(d) => match self.1.next(d) {
+                Step::Yielded(o) => Step::Yielded((o, either::Either::Right(self.1))),
+                Step::Complete(r) => Step::Complete(r),
+            },
         }
     }
 }
@@ -234,7 +230,7 @@ mod tests {
         // First stage yields once then completes with a computed value
         // and_then uses the RETURN value of first stage to create second stage
         let mut stage = and_then(
-            once(|x: i32| x * 2),  // yields x*2, then completes with next input
+            once(|x: i32| x * 2), // yields x*2, then completes with next input
             |return_val| (return_val * 10, repeat(move |y: i32| y + return_val)),
         );
 
@@ -265,10 +261,12 @@ mod tests {
             }
         });
 
-        let mut stage = and_then(first, |final_count| (final_count * 100, once(move |x: i32| x + final_count)));
+        let mut stage = and_then(first, |final_count| {
+            (final_count * 100, once(move |x: i32| x + final_count))
+        });
 
         // First yields
-        assert_eq!(stage.next(5).unwrap_yielded(), 5);  // 5 * 1
+        assert_eq!(stage.next(5).unwrap_yielded(), 5); // 5 * 1
         assert_eq!(stage.next(5).unwrap_yielded(), 10); // 5 * 2
         // Now first completes with count=3, second stage initializes with (300, ...)
         assert_eq!(stage.next(0).unwrap_yielded(), 300); // Initial yield 3 * 100
@@ -281,10 +279,9 @@ mod tests {
     #[test]
     fn test_and_then_with_init_sans() {
         // Second stage has initial yield
-        let mut stage = and_then(
-            once(|x: i32| x + 1),
-            |result| (result * 10, repeat(move |y: i32| y + result)),
-        );
+        let mut stage = and_then(once(|x: i32| x + 1), |result| {
+            (result * 10, repeat(move |y: i32| y + result))
+        });
 
         // First stage: 5 + 1 = 6 (yielded)
         assert_eq!(stage.next(5).unwrap_yielded(), 6);
@@ -299,10 +296,9 @@ mod tests {
     #[test]
     fn test_and_then_completes_immediately() {
         // First stage completes on first input, second stage yields once then completes
-        let mut stage = and_then(
-            once(|x: i32| x * 2),
-            |val| (val + 100, once(move |x: i32| x + val)),
-        );
+        let mut stage = and_then(once(|x: i32| x * 2), |val| {
+            (val + 100, once(move |x: i32| x + val))
+        });
 
         // First: 5 * 2 = 10 (yielded)
         assert_eq!(stage.next(5).unwrap_yielded(), 10);
