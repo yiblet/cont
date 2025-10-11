@@ -26,6 +26,7 @@ use crate::{
     Sans, Step,
     compose::{Chain, MapInput, MapReturn, MapYield, init_chain, init_map_input, init_map_yield, init_map_return},
     build::{Once, Repeat, once, repeat},
+    iter::InitSansIter,
 };
 
 /// Computations that yield an initial value before processing input.
@@ -105,6 +106,14 @@ pub trait InitSans<I, O> {
         F: FnMut(<Self::Next as Sans<I, O>>::Return) -> D2,
     {
         init_map_return(f, self)
+    }
+
+    /// Convert to an iterator.
+    fn into_iter(self) -> InitSansIter<O, Self>
+    where
+        Self: Sized + InitSans<(), O>,
+    {
+        InitSansIter::new(self)
     }
 }
 

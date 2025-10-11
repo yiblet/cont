@@ -33,6 +33,7 @@ use crate::{
     InitSans,
     compose::{AndThen, Chain, MapInput, MapReturn, MapYield, and_then, chain},
     build::{Once, Repeat, once, repeat},
+    iter::SansIter,
     step::Step,
 };
 
@@ -134,6 +135,14 @@ pub trait Sans<I, O> {
         F: FnMut(Self::Return) -> D2,
     {
         crate::compose::map_return(f, self)
+    }
+
+    /// Convert to an iterator.
+    fn into_iter(self) -> SansIter<O, Self>
+    where
+        Self: Sized + Sans<(), O>,
+    {
+        SansIter::new(self)
     }
 }
 
